@@ -247,3 +247,43 @@ If any of these fail, the session is not complete. Fix and recheck.
 **Red gate:** Yellow gate + physical device testing. E-ink specific behaviour verified on the Boox by the project owner. A red gate session is NOT complete until the project owner confirms the device test passes.
 
 **Phase gate:** Comprehensive device test at end of each phase. Full feature set used as a real user would, for one genuine session.
+
+---
+
+## Localisation Rule
+
+Every user-facing string in any UI component must be defined in
+`res/values/strings.xml` and accessed via `stringResource(R.string.key_name)`.
+No hardcoded strings in any Composable or UI class. This includes:
+button labels, error messages, empty state text, confirmation dialogs,
+settings descriptions, navigation labels, tooltip text — everything
+the user reads.
+
+**What does NOT go in strings.xml:**
+- Log messages (developer-facing, English only)
+- Format strings used internally (dates, file paths, UUIDs)
+- Proper nouns that are not translated: AnimaChora, Tessera, Territory,
+  Kintsugi, Scribe, Stoa, Topos
+
+**Supported languages at launch:** English (default), French.
+Add both `res/values/strings.xml` and `res/values-fr/strings.xml` for
+every UI string. French translations may be left as `TODO` placeholders
+at first, but the key must exist in both files.
+
+---
+
+## /advisor Usage
+
+Call `/advisor` (do not attempt to fix first) when:
+- A build failure does not match any recovery pattern in this document
+- A design decision is needed that the spec documents do not cover
+- A KMP or Gradle toolchain error produces unexpected or undocumented behaviour
+- A session is about to take an architectural direction that feels uncertain
+- A Phase gate fails and the cause is not immediately clear
+
+Do not call `/advisor` for:
+- Standard Gradle errors with clear messages
+- Missing imports or type annotation failures
+- Lint violations with clear fix paths
+- Test failures where the cause is immediately clear
+- Permission errors (check settings.json first)
