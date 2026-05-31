@@ -106,3 +106,144 @@ Document list:
 - marginalia-native-sync-spec.md — vault sync
 - marginalia-native-navigation-spec.md — navigation specification
 - marginalia-native-reference-and-shelf.md — shelved items and future reference
+
+---
+
+## Kotlin Coding Standards
+
+### Mandatory patterns
+- Kotlin Flow, not LiveData or RxJava
+- Coroutines, not AsyncTask or threads directly
+- Sealed classes for state representation, not String constants or enums where sealed is clearer
+- Data classes for models, not POJOs
+- Extension functions over utility classes
+- `by lazy` for expensive initialisation
+- Constructor injection via Hilt — never service locator or singleton access
+
+### Coroutine dispatchers — use the correct one
+- `Dispatchers.Main` — UI updates ONLY
+- `Dispatchers.IO` — file system reads/writes, network calls
+- `Dispatchers.Default` — CPU-intensive work (SVG generation, coordinate math, JSON parsing of large files)
+- Never block the main thread. StrictMode in debug builds will crash if you do.
+
+### Resource management
+- Bitmaps, WebViews, Canvas objects must be explicitly released
+- Every component that creates expensive resources implements cleanup called from `ViewModel.onCleared()` or Compose `DisposableEffect`
+- Memory leaks are caught by LeakCanary in debug builds — treat them as build failures
+
+### Error handling
+- Use sealed `Result<T, E>` types across module boundaries — never throw raw exceptions across boundaries
+- Handle all sealed class variants explicitly — no catch-all that swallows specific errors
+- AI provider errors: surface rate limit errors as retry UI, authentication errors as settings UI
+
+---
+
+## Android-Specific Rules
+
+### Lifecycle
+- All state lives in ViewModel — never in Activity or Fragment directly
+- Assume the Activity will be destroyed at any moment — because Android will
+- Configuration changes (rotation, font size, dark mode) trigger Activity recreation — design for this
+
+### Background work
+- WorkManager for any work that must complete even if user leaves the app
+- No foreground services unless the user is actively using the feature
+- No polling. No unnecessary wakeups. Battery respect is non-negotiable.
+
+### Permissions — minimum viable
+- INTERNET — for AI provider and sync only
+- Storage — for vault access
+- No camera permission — Scribe uses the photo picker
+- No location, contacts, microphone, or any other permission
+- Requesting an undocumented permission is an architecture violation
+
+### StrictMode (debug builds)
+- Disk reads on main thread → crash
+- Network on main thread → crash
+- These are not warnings. They are crashes. Fix them, do not suppress them.
+
+---
+
+## Common Claude Code Mistakes — Never Do These
+
+### Architecture violations
+❌ Adding any android.* or androidx.* import to any file in shared/
+❌ Calling AIProvider directly from a feature — always go through AIProviderRegistry
+❌ Writing a file to disk whose format is not in marginalia-native-vault-contract.md
+❌ Hardcoding a numeric or string constant that should be a Setting
+❌ Making a network call outside the four designated exit points
+❌ Creating a new coroutine on Dispatchers.Main for anything other than UI updates
+
+### Vault violations
+❌ Changing a JSON schema without updating marginalia-native-vault-contract.md first
+❌ Writing a JSON file without schemaVersion as the first field
+❌ Storing screen pixel coordinates permanently (normalised world coordinates only)
+❌ Writing a PNG file to disk permanently (PNG is in-memory only for API calls)
+❌ Writing to a vault path not documented in the vault contract
+
+### Session discipline violations
+❌ Marking a session complete without running ./gradlew test
+❌ Marking a session complete without running ./gradlew lint
+❌ Adding a new dependency without checking it is KMP-compatible (for shared/ modules)
+❌ Leaving TODO comments without a linked issue number
+❌ Committing without updating the build state document
+
+---
+
+## Session Completion Checklist
+
+A session is NOT complete until all of these pass:
+
+1. `./gradlew test` — all tests pass, no new failures
+2. `./gradlew lint` — zero new lint violations
+3. No new Android imports in shared/ — verify with grep
+4. No hardcoded values that should be Settings — check new numeric/string literals
+5. No JSON files written without schemaVersion
+6. Build state document updated — appended to ../_docs/marginalia-native-build-state.md
+7. Changes committed with a meaningful commit message
+8. `git push` completed
+
+If any of these fail, the session is not complete. Fix and recheck.
+
+---
+
+## Recovery Patterns
+
+### Build fails after a session
+1. Read the error carefully — what file, what error?
+2. If it is a small fix (missing import, type annotation): fix it, commit with `fix: [description]`
+3. If it is a design error (session got the architecture wrong): revert the session's commits with `git revert`, mark session incomplete, surface to project owner before retrying
+4. Never push a broken build to master
+
+### Lint violations appear
+1. Fix every new violation — do not add to the lint baseline without approval
+2. Suppressing a lint warning with `@SuppressLint` requires a comment explaining why
+
+### Test fails after passing
+1. Do not delete or modify the failing test
+2. Fix the implementation to make the test pass
+3. If the test itself was wrong, surface to project owner before changing it
+
+### Shared core boundary violated
+1. Identify what Android import was added and why
+2. Extract the capability to a platform interface in shared/
+3. Move the Android-specific implementation to androidApp/platform/
+4. This is never a "small fix" — it requires design work
+
+### Session runs long (approaching context limit)
+1. Commit whatever is complete and working
+2. Write a clear handoff note in the build state document
+3. The next session picks up from the committed state
+4. Never leave uncommitted work when approaching context limits
+
+---
+
+## Gate Types — When Device Testing Is Required
+
+**Green gate:** Automated only. `./gradlew test` + `./gradlew lint`. No device needed.
+
+**Yellow gate:** Green gate + emulator testing. UI verified for functional correctness on the Pixel 6 emulator.
+
+**Red gate:** Yellow gate + physical device testing. E-ink specific behaviour verified on the Boox by the project owner. A red gate session is NOT complete until the project owner confirms the device test passes.
+
+**Phase gate:** Comprehensive device test at end of each phase. Full feature set used as a real user would, for one genuine session.
