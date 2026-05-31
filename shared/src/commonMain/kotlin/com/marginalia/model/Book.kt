@@ -1,5 +1,8 @@
 package com.marginalia.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class Book(
     val id: String,
     val title: String,
@@ -14,10 +17,13 @@ data class Book(
     val territoryId: String
 )
 
+@Serializable
 enum class BookFormat { EPUB, PDF, MOBI, AZW3, FB2, CBZ }
 
+@Serializable
 enum class ReadingStatus { UNREAD, READING, FINISHED, ABANDONED }
 
+@Serializable
 data class ReadingProgress(
     val cfi: String?,
     val pageNumber: Int?,
