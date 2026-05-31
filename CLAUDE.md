@@ -79,3 +79,30 @@ com.marginalia.scribe    — Scribe pipeline (no rasterisation here)
 com.marginalia.settings  — SettingsRegistry and Setting<T>
 com.marginalia.sync      — SyncManager interface
 com.marginalia.vault     — Vault file I/O, note service, schema
+
+## Build State Document
+The build state document lives at: ../_docs/marginalia-native-build-state.md
+
+Every session MUST update this document before marking itself complete.
+Update format: append a new session entry with date, session number,
+what was built, what was adapted, gate status, next session.
+Never overwrite previous entries — always append.
+
+## Architecture Documents
+All architecture spec documents live at: ../_docs/
+
+Before any session that touches a new feature area, read the relevant
+spec document from ../_docs/ before writing any code.
+
+Document list:
+- marginalia-native-architecture.md — read first, always
+- marginalia-native-decisions.md — 38 decisions with reasoning
+- marginalia-native-vault-contract.md — every file written to disk
+- marginalia-native-ai-provider-spec.md — AI provider interface
+- marginalia-native-ink-note-spec.md — handwriting system
+- marginalia-native-canvas-spec.md — tessera canvas system
+- marginalia-native-eink-refresh-strategy.md — display refresh
+- marginalia-native-scribe-pipeline-spec.md — transcription pipeline
+- marginalia-native-sync-spec.md — vault sync
+- marginalia-native-navigation-spec.md — navigation specification
+- marginalia-native-reference-and-shelf.md — shelved items and future reference
