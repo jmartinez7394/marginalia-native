@@ -15,12 +15,13 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                // No dependencies yet — added as features are built
+                implementation(libs.kotlinx.coroutines.core)
             }
         }
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
     }
