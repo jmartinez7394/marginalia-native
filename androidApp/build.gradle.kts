@@ -59,6 +59,7 @@ dependencies {
     // Dependency injection
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    implementation(libs.hilt.navigation.compose)
 
     // Readium EPUB toolkit
     implementation(libs.readium.shared)

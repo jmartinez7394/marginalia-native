@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Marginalia</string>
+
+    <!-- Library screen -->
+    <string name="library_empty_title">TODO: Votre bibliothèque est vide</string>
+    <string name="library_empty_subtitle">TODO: Ajoutez un livre pour commencer votre pratique</string>
+    <string name="library_add_book">TODO: Ajouter un livre</string>
+    <string name="library_loading">TODO: Chargement de votre bibliothèque…</string>
+    <string name="library_error_retry">TODO: Réessayer</string>
+
+    <!-- Reading status labels -->
+    <string name="library_reading_status_unread">TODO: Non lu</string>
+    <string name="library_reading_status_reading">TODO: En cours</string>
+    <string name="library_reading_status_finished">TODO: Terminé</string>
+    <string name="library_reading_status_abandoned">TODO: Abandonné</string>
+</resources>

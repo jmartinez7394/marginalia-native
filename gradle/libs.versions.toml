@@ -7,6 +7,7 @@ androidxCoreKtx = "1.18.0"
 androidxActivityCompose = "1.13.0"
 composeBom = "2026.05.01"
 ksp = "2.3.9"
+hiltNavigationCompose = "1.2.0"
 desugar = "2.1.5"
 hilt = "2.59.2"
 readium = "3.0.0"
@@ -28,6 +29,7 @@ readium-shared = { group = "org.readium.kotlin-toolkit", name = "readium-shared"
 readium-streamer = { group = "org.readium.kotlin-toolkit", name = "readium-streamer", version.ref = "readium" }
 readium-navigator = { group = "org.readium.kotlin-toolkit", name = "readium-navigator", version.ref = "readium" }
 android-desugar-jdk = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
+hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Marginalia</string>
+
+    <!-- Library screen -->
+    <string name="library_empty_title">Your library is empty</string>
+    <string name="library_empty_subtitle">Add a book to begin your practice</string>
+    <string name="library_add_book">Add book</string>
+    <string name="library_loading">Loading your library…</string>
+    <string name="library_error_retry">Retry</string>
+
+    <!-- Reading status labels -->
+    <string name="library_reading_status_unread">Unread</string>
+    <string name="library_reading_status_reading">Reading</string>
+    <string name="library_reading_status_finished">Finished</string>
+    <string name="library_reading_status_abandoned">Abandoned</string>
+</resources>
