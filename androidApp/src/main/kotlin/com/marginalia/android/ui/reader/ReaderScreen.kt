@@ -20,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -159,12 +160,19 @@ private fun ReadyReader(
 
     val highlights by viewModel.currentHighlights.collectAsState()
 
+    // Colour picker state (new highlight being created from selection)
     var showColourPicker by remember { mutableStateOf(false) }
     var pendingSelectionCfi by remember { mutableStateOf("") }
     var pendingSelectionHref by remember { mutableStateOf("") }
     var pendingSelectionLocatorJson by remember { mutableStateOf("") }
     var pendingSelectionText by remember { mutableStateOf("") }
-    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Annotation sheet state (existing highlight tapped for editing)
+    val selectedHighlightIdRef = remember { mutableStateOf<String?>(null) }
+    var selectedHighlightId by selectedHighlightIdRef
+    val selectedHighlight = highlights.find { it.id == selectedHighlightId }
+
+    val colourPickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 
     // Fire GC16 when app returns to foreground while the reader is open.
@@ -179,9 +187,14 @@ private fun ReadyReader(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Fire DU when the colour picker bottom sheet opens.
+    // Fire DU when colour picker opens (new highlight creation).
     LaunchedEffect(showColourPicker) {
         if (showColourPicker) viewModel.onAnnotationOpen()
+    }
+
+    // Fire DU when annotation sheet opens (existing highlight editing).
+    LaunchedEffect(selectedHighlight) {
+        if (selectedHighlight != null) viewModel.onAnnotationOpen()
     }
 
     // Full-screen FragmentContainerView. Background matches reading theme to prevent
@@ -228,7 +241,6 @@ private fun ReadyReader(
             Log.d(TAG, "EpubNavigatorFragment added: $fragment")
 
             if (fragment != null) {
-                // Set the fragment root background to match reading theme — prevents white flash.
                 fragment.view?.setBackgroundColor(Color.WHITE)
 
                 // InputListener wired after the WebView processes taps, so long-press (text
@@ -251,8 +263,6 @@ private fun ReadyReader(
                         }
                     }
                     override fun onDrag(event: DragEvent): Boolean {
-                        // Fires during both text-selection drag (A2 = selection expand)
-                        // and scroll drag (A2 = scroll active). Both are correct per spec.
                         viewModel.onScrollActive()
                         viewModel.scheduleScrollSettle()
                         return false
@@ -282,6 +292,28 @@ private fun ReadyReader(
         }
     }
 
+    // Register decoration activation listener so tapping a highlight opens the annotation sheet.
+    // Decoration.Style.Highlight with isActive=true makes the decoration fire this listener.
+    DisposableEffect(navigatorFragment) {
+        val fragment = navigatorFragment
+            ?: return@DisposableEffect onDispose {}
+        val decorable = fragment as? DecorableNavigator
+            ?: return@DisposableEffect onDispose {}
+        val decorationListener = object : DecorableNavigator.Listener {
+            override fun onDecorationActivated(event: DecorableNavigator.OnActivatedEvent): Boolean {
+                if (event.group == HIGHLIGHT_GROUP) {
+                    selectedHighlightIdRef.value = event.decoration.id
+                    return true
+                }
+                return false
+            }
+        }
+        decorable.addDecorationListener(HIGHLIGHT_GROUP, decorationListener)
+        onDispose {
+            decorable.removeDecorationListener(decorationListener)
+        }
+    }
+
     // Observe navigator position and persist reading progress on every page change.
     LaunchedEffect(navigatorFragment) {
         val fragment = navigatorFragment ?: return@LaunchedEffect
@@ -291,12 +323,10 @@ private fun ReadyReader(
     }
 
     // Apply highlight decorations whenever the list changes.
+    // Non-null extras Bundle makes each decoration activatable via onDecorationActivated.
     LaunchedEffect(navigatorFragment, highlights) {
         val fragment = navigatorFragment ?: return@LaunchedEffect
         val decorable = fragment as? DecorableNavigator ?: return@LaunchedEffect
-        val supportsHighlight = decorable.supportsDecorationStyle(Decoration.Style.Highlight::class)
-        val supportsUnderline = decorable.supportsDecorationStyle(Decoration.Style.Underline::class)
-        Log.d(TAG, "decoration support: Highlight=$supportsHighlight Underline=$supportsUnderline")
         val decorations = highlights.mapNotNull { it.toDecoration() }
         Log.d(TAG, "applyDecorations: ${highlights.size} highlights → ${decorations.size} decorations")
         decorable.applyDecorations(decorations, HIGHLIGHT_GROUP)
@@ -360,26 +390,192 @@ private fun ReadyReader(
         }
     }
 
+    // New highlight creation — colour picker sheet
     if (showColourPicker) {
         ModalBottomSheet(
             onDismissRequest = { showColourPicker = false },
-            sheetState = bottomSheetState
+            sheetState = colourPickerSheetState
         ) {
             HighlightColourPicker(
                 onColourSelected = { colour ->
-                    viewModel.createHighlight(pendingSelectionCfi, pendingSelectionHref, pendingSelectionLocatorJson, pendingSelectionText, colour)
+                    viewModel.createHighlight(
+                        pendingSelectionCfi,
+                        pendingSelectionHref,
+                        pendingSelectionLocatorJson,
+                        pendingSelectionText,
+                        colour
+                    )
                     coroutineScope.launch {
-                        bottomSheetState.hide()
+                        colourPickerSheetState.hide()
                         showColourPicker = false
                     }
                 },
                 onDismiss = {
                     coroutineScope.launch {
-                        bottomSheetState.hide()
+                        colourPickerSheetState.hide()
                         showColourPicker = false
                     }
                 }
             )
+        }
+    }
+
+    // Existing highlight editing — annotation sheet
+    if (selectedHighlight != null) {
+        AnnotationBottomSheet(
+            highlight = selectedHighlight,
+            onSave = { annotation, colour ->
+                viewModel.updateHighlight(
+                    selectedHighlight.copy(
+                        annotation = annotation.trim().ifEmpty { null },
+                        colour = colour
+                    )
+                )
+                selectedHighlightId = null
+            },
+            onDelete = {
+                viewModel.deleteHighlight(selectedHighlight.id)
+                selectedHighlightId = null
+            },
+            onDismiss = { selectedHighlightId = null }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AnnotationBottomSheet(
+    highlight: Highlight,
+    onSave: (annotation: String, colour: HighlightColour) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var annotationText by remember(highlight.id) { mutableStateOf(highlight.annotation ?: "") }
+    var selectedColour by remember(highlight.id) { mutableStateOf(highlight.colour) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Read-only passage preview — greyed context
+            val preview = highlight.text.take(160).let {
+                if (highlight.text.length > 160) "$it…" else it
+            }
+            Text(
+                text = "\"$preview\"",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Annotation input
+            OutlinedTextField(
+                value = annotationText,
+                onValueChange = { annotationText = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text(stringResource(R.string.highlight_annotation_hint)) },
+                minLines = 3,
+                maxLines = 6
+            )
+
+            // Colour selection — filled Button for selected, OutlinedButton for others
+            Text(
+                text = stringResource(R.string.highlight_colour_change),
+                style = MaterialTheme.typography.labelMedium
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ColourButton(
+                    colour = HighlightColour.YELLOW,
+                    selected = selectedColour == HighlightColour.YELLOW,
+                    label = stringResource(R.string.highlight_colour_yellow),
+                    onSelect = { selectedColour = it },
+                    modifier = Modifier.weight(1f)
+                )
+                ColourButton(
+                    colour = HighlightColour.GREEN,
+                    selected = selectedColour == HighlightColour.GREEN,
+                    label = stringResource(R.string.highlight_colour_green),
+                    onSelect = { selectedColour = it },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ColourButton(
+                    colour = HighlightColour.BLUE,
+                    selected = selectedColour == HighlightColour.BLUE,
+                    label = stringResource(R.string.highlight_colour_blue),
+                    onSelect = { selectedColour = it },
+                    modifier = Modifier.weight(1f)
+                )
+                ColourButton(
+                    colour = HighlightColour.PINK,
+                    selected = selectedColour == HighlightColour.PINK,
+                    label = stringResource(R.string.highlight_colour_pink),
+                    onSelect = { selectedColour = it },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // Save
+            Button(
+                onClick = {
+                    val annotation = annotationText
+                    val colour = selectedColour
+                    scope.launch {
+                        sheetState.hide()
+                        onSave(annotation, colour)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.highlight_annotation_save))
+            }
+
+            // Delete
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        sheetState.hide()
+                        onDelete()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.highlight_annotation_delete))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColourButton(
+    colour: HighlightColour,
+    selected: Boolean,
+    label: String,
+    onSelect: (HighlightColour) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (selected) {
+        Button(onClick = { onSelect(colour) }, modifier = modifier) {
+            Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    } else {
+        OutlinedButton(onClick = { onSelect(colour) }, modifier = modifier) {
+            Text(label, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -439,7 +635,6 @@ private fun HighlightColourPicker(
 
 private fun Highlight.toDecoration(): Decoration? {
     // Greyscale tints for e-ink: YELLOW=lightest (background highlight), PINK=darkest.
-    // Alpha ~100/255 gives visible-but-not-oppressive overlay on e-ink white background.
     val tint = when (colour) {
         HighlightColour.YELLOW -> Color.argb(100, 200, 200, 200)
         HighlightColour.GREEN -> Color.argb(120, 160, 160, 160)
@@ -447,7 +642,6 @@ private fun Highlight.toDecoration(): Decoration? {
         HighlightColour.PINK -> Color.argb(160, 80, 80, 80)
     }
     // Prefer the complete stored locator (preserves CFI, text context, progression).
-    // Fall back to rebuilding from href+cfi for highlights created before locatorJson was added.
     val locator = when {
         locatorJson.isNotEmpty() -> try {
             org.readium.r2.shared.publication.Locator.fromJSON(org.json.JSONObject(locatorJson))
@@ -470,10 +664,11 @@ private fun Highlight.toDecoration(): Decoration? {
         android.util.Log.w("ReaderScreen", "toDecoration: null locator for href=$href cfi=$cfi")
         return null
     }
-    android.util.Log.d("ReaderScreen", "toDecoration: href=${locator.href} cfi=${locator.locations.fragments.firstOrNull()} text='${text.take(20)}'")
+    // isActive=true on Highlight style makes this decoration activatable — Readium fires
+    // DecorableNavigator.Listener.onDecorationActivated when the user taps it.
     return Decoration(
         id = id,
         locator = locator,
-        style = Decoration.Style.Highlight(tint = tint)
+        style = Decoration.Style.Highlight(tint = tint, isActive = true)
     )
 }

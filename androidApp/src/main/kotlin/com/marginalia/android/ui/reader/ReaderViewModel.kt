@@ -143,6 +143,24 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    fun updateHighlight(highlight: Highlight) {
+        viewModelScope.launch(Dispatchers.IO) {
+            when (val result = highlightRepository.updateHighlight(highlight)) {
+                is Result.Success -> {
+                    val updated = _highlights.value.map { if (it.id == highlight.id) highlight else it }
+                    _highlights.value = updated
+                    Log.d(TAG, "Highlight updated: ${highlight.id}")
+                    displayRefreshManager.refreshRegalFull()
+                    _debugRefreshMode.value = RefreshMode.REGAL
+                    val bookId = currentBookId ?: return@launch
+                    updateLinkedNote(bookId, updated)
+                }
+                is Result.Failure ->
+                    Log.e(TAG, "Failed to update highlight: ${result.error}")
+            }
+        }
+    }
+
     fun deleteHighlight(highlightId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             when (val result = highlightRepository.deleteHighlight(highlightId)) {

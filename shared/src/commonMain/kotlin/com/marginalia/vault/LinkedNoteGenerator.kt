@@ -49,7 +49,7 @@ object LinkedNoteGenerator {
                 sb.append("> ${highlight.text}\n")
                 sb.append("^ann-${highlight.id}\n")
                 if (!highlight.annotation.isNullOrEmpty()) {
-                    sb.append("\n${highlight.annotation}\n")
+                    sb.append("\n*${highlight.annotation}*\n")
                 }
                 sb.append("\n")
             }

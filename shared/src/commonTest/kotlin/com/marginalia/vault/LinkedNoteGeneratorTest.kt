@@ -143,4 +143,38 @@ class LinkedNoteGeneratorTest {
         assertTrue(result.contains("importedAt: \"2026-06-15\""), "Should embed import date")
         assertTrue(result.contains("startedAt: \"2026-06-15\""), "Should embed start date")
     }
+
+    @Test
+    fun `annotation renders as italic text in linked note`() {
+        val highlight = makeHighlight("h1", "A wise passage", annotation = "This resonates deeply")
+        val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
+        assertTrue(result.contains("*This resonates deeply*"), "Annotation should be wrapped in italic markers")
+    }
+
+    @Test
+    fun `null annotation produces no annotation line after block ID`() {
+        val highlight = makeHighlight("h1", "A wise passage", annotation = null)
+        val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
+        assertTrue(result.contains("^ann-h1"), "Block ID must be present")
+        val lines = result.lines()
+        val blockIdx = lines.indexOfFirst { it == "^ann-h1" }
+        assertTrue(blockIdx >= 0, "Block ID line must exist")
+        // The two lines following the block ID should not be italic-wrapped annotation text
+        val nearBlock = lines.subList(blockIdx + 1, minOf(blockIdx + 3, lines.size))
+        assertFalse(
+            nearBlock.any { it.startsWith("*") && it.endsWith("*") && it.length > 2 },
+            "No italic annotation line near block ID when annotation is null"
+        )
+    }
+
+    @Test
+    fun `annotation appears after block ID line`() {
+        val highlight = makeHighlight("h1", "A passage", annotation = "My thought")
+        val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
+        val lines = result.lines()
+        val blockIdLine = lines.indexOfFirst { it == "^ann-h1" }
+        assertTrue(blockIdLine >= 0, "Block ID line must exist")
+        val annotationLine = lines.indexOfFirst { it.contains("*My thought*") }
+        assertTrue(annotationLine > blockIdLine, "Annotation must appear after block ID")
+    }
 }

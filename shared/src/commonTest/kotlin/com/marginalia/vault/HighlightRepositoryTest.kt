@@ -129,4 +129,31 @@ class HighlightRepositoryTest {
         val failure = assertIs<Result.Failure<HighlightError>>(result)
         assertIs<HighlightError.HighlightNotFound>(failure.error)
     }
+
+    @Test
+    fun `annotation overwrites previous annotation on update`() = runTest {
+        val repo = makeRepo()
+        val original = makeHighlight(annotation = "first note")
+        repo.addHighlight(original)
+
+        val secondUpdate = original.copy(annotation = "second note")
+        repo.updateHighlight(secondUpdate)
+
+        val loaded = repo.getHighlights("book1")
+        assertEquals("second note", loaded.first().annotation)
+    }
+
+    @Test
+    fun `null annotation clears annotation field on update`() = runTest {
+        val repo = makeRepo()
+        val original = makeHighlight(annotation = "some note")
+        repo.addHighlight(original)
+
+        val cleared = original.copy(annotation = null)
+        val result = repo.updateHighlight(cleared)
+        assertIs<Result.Success<Highlight>>(result)
+
+        val loaded = repo.getHighlights("book1")
+        assertEquals(null, loaded.first().annotation)
+    }
 }

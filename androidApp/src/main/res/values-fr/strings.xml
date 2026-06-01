@@ -26,6 +26,13 @@
     <string name="highlight_add_annotation">TODO: Ajouter une annotation</string>
     <string name="highlight_delete">TODO: Supprimer le surlignage</string>
 
+    <!-- Annotation bottom sheet -->
+    <string name="highlight_annotation_hint">TODO: Ajouter une note à ce passage…</string>
+    <string name="highlight_annotation_save">TODO: Enregistrer</string>
+    <string name="highlight_annotation_delete">TODO: Supprimer le surlignage</string>
+    <string name="highlight_annotation_delete_confirm">TODO: Supprimer ce surlignage ?</string>
+    <string name="highlight_colour_change">TODO: Changer la couleur</string>
+
     <!-- Reading status labels -->
     <string name="library_reading_status_unread">TODO: Non lu</string>
     <string name="library_reading_status_reading">TODO: En cours</string>

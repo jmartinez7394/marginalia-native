@@ -26,6 +26,13 @@
     <string name="highlight_add_annotation">Add annotation</string>
     <string name="highlight_delete">Delete highlight</string>
 
+    <!-- Annotation bottom sheet -->
+    <string name="highlight_annotation_hint">Add a note to this passage…</string>
+    <string name="highlight_annotation_save">Save</string>
+    <string name="highlight_annotation_delete">Delete highlight</string>
+    <string name="highlight_annotation_delete_confirm">Delete this highlight?</string>
+    <string name="highlight_colour_change">Change colour</string>
+
     <!-- Reading status labels -->
     <string name="library_reading_status_unread">Unread</string>
     <string name="library_reading_status_reading">Reading</string>
