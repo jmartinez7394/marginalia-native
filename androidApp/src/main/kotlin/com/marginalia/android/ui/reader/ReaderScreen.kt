@@ -52,8 +52,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.foundation.layout.wrapContentSize
 import com.marginalia.android.BuildConfig
 import com.marginalia.android.R
+import com.marginalia.android.di.AppSettings
 import com.marginalia.model.ConceptNote
 import com.marginalia.model.EmotionalTag
 import com.marginalia.model.Highlight
@@ -81,6 +83,7 @@ private const val HIGHLIGHT_GROUP = "highlights"
 private const val SELECTION_POLL_MS = 300L
 private const val SELECTION_STABLE_MS = 1200L
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(
     bookId: String,
@@ -94,6 +97,17 @@ fun ReaderScreen(
     BackHandler { onExit() }
 
     val uiState by viewModel.uiState.collectAsState()
+    val activeHighlightColour by viewModel.activeHighlightColour.collectAsState()
+    val annotationModeActive by viewModel.annotationModeActive.collectAsState()
+
+    // Highlighter colour picker (opened from always-visible button)
+    var showHighlighterColourPicker by remember { mutableStateOf(false) }
+    val highlighterPickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val screenScope = rememberCoroutineScope()
+
+    // Pen settings sheet
+    var showPenSettings by remember { mutableStateOf(false) }
+    val penSettingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Box(modifier = Modifier.fillMaxSize()) {
         when (val state = uiState) {
@@ -110,11 +124,95 @@ fun ReaderScreen(
             )
         }
 
+        // Always-visible buttons — top-right, visible whenever the reader is not in error/loading
+        if (uiState !is ReaderUiState.Error) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 8.dp, end = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { showHighlighterColourPicker = true },
+                    modifier = Modifier.wrapContentSize()
+                ) {
+                    Text(
+                        text = "${colourDot(activeHighlightColour)} ${stringResource(R.string.annotation_highlighter_button)}",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                OutlinedButton(
+                    onClick = { showPenSettings = true },
+                    modifier = Modifier.wrapContentSize()
+                ) {
+                    Text(
+                        text = stringResource(R.string.annotation_pen_settings_button),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        }
+
+        // Annotation mode active indicator — top-left, subtle
+        if (annotationModeActive) {
+            Text(
+                text = stringResource(R.string.annotation_mode_active),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 8.dp, start = 8.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
         if (BuildConfig.DEBUG) {
             val debugMode by viewModel.debugRefreshMode.collectAsState()
             RefreshDebugOverlay(
                 lastMode = debugMode,
-                modifier = Modifier.align(Alignment.TopEnd)
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 36.dp)
+            )
+        }
+    }
+
+    // Highlighter colour picker sheet (from always-visible button)
+    if (showHighlighterColourPicker) {
+        ModalBottomSheet(
+            onDismissRequest = { showHighlighterColourPicker = false },
+            sheetState = highlighterPickerSheetState
+        ) {
+            HighlighterColourSelector(
+                currentColour = activeHighlightColour,
+                onColourSelected = { colour ->
+                    viewModel.setHighlightColour(colour)
+                    screenScope.launch {
+                        highlighterPickerSheetState.hide()
+                        showHighlighterColourPicker = false
+                    }
+                },
+                onDismiss = {
+                    screenScope.launch {
+                        highlighterPickerSheetState.hide()
+                        showHighlighterColourPicker = false
+                    }
+                }
+            )
+        }
+    }
+
+    // Pen settings sheet
+    if (showPenSettings) {
+        ModalBottomSheet(
+            onDismissRequest = { showPenSettings = false },
+            sheetState = penSettingsSheetState
+        ) {
+            PenSettingsSheet(
+                viewModel = viewModel,
+                onDismiss = {
+                    screenScope.launch {
+                        penSettingsSheetState.hide()
+                        showPenSettings = false
+                    }
+                }
             )
         }
     }
@@ -220,6 +318,33 @@ private fun ReadyReader(
                 id = containerId
                 setBackgroundColor(Color.WHITE)
             }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+
+    // Ink overlay — positioned above Readium, transparent to input when annotation inactive.
+    // Captures stylus events and double-tap in annotation mode. Double-tap works for all
+    // input types so the emulator can trigger annotation mode without a physical stylus.
+    val inkOverlayRef = remember { mutableStateOf<InkOverlayView?>(null) }
+    val annotationModeFromVm by viewModel.annotationModeActive.collectAsState()
+    val doubleTapThreshold = settingsValue(viewModel, AppSettings.ANNOTATION_DOUBLE_TAP_THRESHOLD_MS)
+    val doubleTapTolerance = settingsValue(viewModel, AppSettings.ANNOTATION_DOUBLE_TAP_TOLERANCE_PX)
+    val strokeWidth = settingsValue(viewModel, AppSettings.PEN_STROKE_WIDTH)
+
+    AndroidView(
+        factory = { ctx ->
+            InkOverlayView(ctx).also { overlay ->
+                inkOverlayRef.value = overlay
+                overlay.onDoubleTap = { viewModel.activateAnnotationMode() }
+                overlay.onAnnotationStroke = { viewModel.resetAnnotationInactivityTimer() }
+                overlay.setBackgroundColor(Color.TRANSPARENT)
+            }
+        },
+        update = { overlay ->
+            overlay.annotationModeActive = annotationModeFromVm
+            overlay.doubleTapThresholdMs = doubleTapThreshold
+            overlay.doubleTapTolerancePx = doubleTapTolerance.toFloat()
+            overlay.strokeWidthPx = strokeWidth.toFloat() * 2f // dp-ish scaling
         },
         modifier = Modifier.fillMaxSize()
     )
@@ -1117,6 +1242,175 @@ private fun HighlightColourPicker(
             Text(stringResource(R.string.highlight_delete))
         }
     }
+}
+
+// --- Pen and highlighter UI composables ---
+
+@Composable
+private fun colourDot(colour: HighlightColour): String = when (colour) {
+    HighlightColour.YELLOW -> "○"
+    HighlightColour.GREEN -> "◔"
+    HighlightColour.BLUE -> "◑"
+    HighlightColour.PINK -> "◕"
+}
+
+@Composable
+private fun HighlighterColourSelector(
+    currentColour: HighlightColour,
+    onColourSelected: (HighlightColour) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.annotation_highlighter_button),
+            style = MaterialTheme.typography.titleSmall
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ColourButton(
+                colour = HighlightColour.YELLOW,
+                selected = currentColour == HighlightColour.YELLOW,
+                label = stringResource(R.string.highlight_colour_yellow),
+                onSelect = onColourSelected,
+                modifier = Modifier.weight(1f)
+            )
+            ColourButton(
+                colour = HighlightColour.GREEN,
+                selected = currentColour == HighlightColour.GREEN,
+                label = stringResource(R.string.highlight_colour_green),
+                onSelect = onColourSelected,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ColourButton(
+                colour = HighlightColour.BLUE,
+                selected = currentColour == HighlightColour.BLUE,
+                label = stringResource(R.string.highlight_colour_blue),
+                onSelect = onColourSelected,
+                modifier = Modifier.weight(1f)
+            )
+            ColourButton(
+                colour = HighlightColour.PINK,
+                selected = currentColour == HighlightColour.PINK,
+                label = stringResource(R.string.highlight_colour_pink),
+                onSelect = onColourSelected,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        OutlinedButton(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+        ) {
+            Text(stringResource(R.string.highlight_delete))
+        }
+    }
+}
+
+@Composable
+private fun PenSettingsSheet(
+    viewModel: ReaderViewModel,
+    onDismiss: () -> Unit
+) {
+    val strokeWidth = settingsValue(viewModel, AppSettings.PEN_STROKE_WIDTH)
+    val pressureSensitivity = settingsStringValue(viewModel, AppSettings.PEN_PRESSURE_SENSITIVITY)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.pen_settings_title),
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        // Stroke width selector
+        Text(
+            text = stringResource(R.string.pen_stroke_width_label),
+            style = MaterialTheme.typography.labelMedium
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(1, 2, 4, 6, 8).forEach { width ->
+                if (strokeWidth == width) {
+                    Button(
+                        onClick = { viewModel.setPenStrokeWidth(width) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("$width", style = MaterialTheme.typography.labelSmall) }
+                } else {
+                    OutlinedButton(
+                        onClick = { viewModel.setPenStrokeWidth(width) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("$width", style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+        }
+
+        // Pressure sensitivity selector
+        Text(
+            text = stringResource(R.string.pen_pressure_label),
+            style = MaterialTheme.typography.labelMedium
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                "light" to stringResource(R.string.pen_pressure_light),
+                "normal" to stringResource(R.string.pen_pressure_normal),
+                "firm" to stringResource(R.string.pen_pressure_firm)
+            ).forEach { (key, label) ->
+                if (pressureSensitivity == key) {
+                    Button(
+                        onClick = { viewModel.setPressureSensitivity(key) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(label, style = MaterialTheme.typography.labelSmall) }
+                } else {
+                    OutlinedButton(
+                        onClick = { viewModel.setPressureSensitivity(key) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(label, style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(stringResource(R.string.highlight_annotation_save)) }
+    }
+}
+
+// Helper: read an Int setting from ViewModel's SettingsRegistry (accessed via saved state).
+// This avoids exposing the registry directly to the UI.
+@Composable
+private fun settingsValue(viewModel: ReaderViewModel, setting: com.marginalia.settings.Setting<Int>): Int =
+    remember(setting.key) { viewModel.getIntSetting(setting) }
+
+@Composable
+private fun settingsStringValue(viewModel: ReaderViewModel, setting: com.marginalia.settings.Setting<String>): String {
+    var value by remember { mutableStateOf(viewModel.getStringSetting(setting)) }
+    // Observe changes via a produced state driven by ViewModel updates
+    LaunchedEffect(Unit) {
+        // Re-read on composition — settings changes are rare and don't need continuous observation
+        value = viewModel.getStringSetting(setting)
+    }
+    return value
 }
 
 private fun Highlight.toDecoration(): Decoration? {

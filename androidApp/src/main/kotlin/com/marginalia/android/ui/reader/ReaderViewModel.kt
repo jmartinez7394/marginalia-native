@@ -72,10 +72,17 @@ class ReaderViewModel @Inject constructor(
     private val _debugRefreshMode = MutableStateFlow<RefreshMode?>(null)
     val debugRefreshMode: StateFlow<RefreshMode?> = _debugRefreshMode.asStateFlow()
 
+    private val _annotationModeActive = MutableStateFlow(false)
+    val annotationModeActive: StateFlow<Boolean> = _annotationModeActive.asStateFlow()
+
+    private val _activeHighlightColour = MutableStateFlow(HighlightColour.YELLOW)
+    val activeHighlightColour: StateFlow<HighlightColour> = _activeHighlightColour.asStateFlow()
+
     private var openPublication: Publication? = null
     private var currentBookId: String? = null
     private var currentBook: Book? = null
     private var scrollSettleJob: Job? = null
+    private var inactivityTimeoutJob: Job? = null
 
     fun openBook(bookId: String) {
         viewModelScope.launch {
@@ -255,6 +262,60 @@ class ReaderViewModel @Inject constructor(
         _debugRefreshMode.value = RefreshMode.REGAL
     }
 
+    // --- Annotation mode ---
+
+    fun activateAnnotationMode() {
+        inactivityTimeoutJob?.cancel()
+        _annotationModeActive.value = true
+        displayRefreshManager.refreshRegalFull()
+        _debugRefreshMode.value = RefreshMode.REGAL
+        scheduleAnnotationInactivity()
+    }
+
+    fun deactivateAnnotationMode() {
+        inactivityTimeoutJob?.cancel()
+        _annotationModeActive.value = false
+        displayRefreshManager.refreshFull()
+        _debugRefreshMode.value = RefreshMode.GC16
+    }
+
+    fun resetAnnotationInactivityTimer() {
+        if (!_annotationModeActive.value) return
+        inactivityTimeoutJob?.cancel()
+        displayRefreshManager.refreshFast()
+        _debugRefreshMode.value = RefreshMode.A2
+        scheduleAnnotationInactivity()
+    }
+
+    private fun scheduleAnnotationInactivity() {
+        val timeoutMs = settingsRegistry.get(AppSettings.ANNOTATION_INACTIVITY_TIMEOUT_MS).toLong()
+        if (timeoutMs <= 0L) return
+        inactivityTimeoutJob = viewModelScope.launch {
+            delay(timeoutMs)
+            deactivateAnnotationMode()
+        }
+    }
+
+    fun setHighlightColour(colour: HighlightColour) {
+        _activeHighlightColour.value = colour
+    }
+
+    fun setPenStrokeWidth(width: Int) {
+        settingsRegistry.set(AppSettings.PEN_STROKE_WIDTH, width)
+    }
+
+    fun setPressureSensitivity(key: String) {
+        settingsRegistry.set(AppSettings.PEN_PRESSURE_SENSITIVITY, key)
+    }
+
+    fun getIntSetting(setting: com.marginalia.settings.Setting<Int>): Int =
+        settingsRegistry.get(setting)
+
+    fun getStringSetting(setting: com.marginalia.settings.Setting<String>): String =
+        settingsRegistry.get(setting)
+
+    // --- End annotation mode ---
+
     // --- End refresh events ---
 
     private suspend fun updateLinkedNote(bookId: String, highlights: List<Highlight>) {
@@ -385,6 +446,7 @@ class ReaderViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         scrollSettleJob?.cancel()
+        inactivityTimeoutJob?.cancel()
         openPublication?.let { bookOpener.close(it) }
         openPublication = null
     }

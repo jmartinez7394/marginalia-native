@@ -90,6 +90,52 @@ object AppSettings {
         description = "Days to defer a concept candidate before re-surfacing"
     )
 
+    // Annotation mode
+    val ANNOTATION_INACTIVITY_TIMEOUT_MS = Setting(
+        key = "annotation.inactivity_timeout_ms",
+        default = 2000,
+        userVisible = true,
+        category = SettingCategory.WRITING,
+        description = "Ms of pen inactivity before annotation mode closes (0 = manual close)"
+    )
+    val ANNOTATION_DOUBLE_TAP_THRESHOLD_MS = Setting(
+        key = "annotation.double_tap_threshold_ms",
+        default = 300,
+        userVisible = false,
+        category = SettingCategory.WRITING,
+        description = "Ms window for double-tap to activate annotation mode"
+    )
+    val ANNOTATION_DOUBLE_TAP_TOLERANCE_PX = Setting(
+        key = "annotation.double_tap_tolerance_px",
+        default = 50,
+        userVisible = false,
+        category = SettingCategory.WRITING,
+        description = "Pixel tolerance for double-tap detection"
+    )
+
+    // Pen settings
+    val PEN_STROKE_WIDTH = Setting(
+        key = "pen.stroke_width",
+        default = 2,
+        userVisible = true,
+        category = SettingCategory.WRITING,
+        description = "Ink stroke width in pixels (1–8)"
+    )
+    val PEN_PRESSURE_SENSITIVITY = Setting(
+        key = "pen.pressure_sensitivity",
+        default = "normal",
+        userVisible = true,
+        category = SettingCategory.WRITING,
+        description = "Pressure sensitivity curve: light, normal, firm"
+    )
+    val PEN_BUTTON_ACTION = Setting(
+        key = "pen.button_action",
+        default = "eraser",
+        userVisible = true,
+        category = SettingCategory.WRITING,
+        description = "Pen hardware button action: eraser, nothing"
+    )
+
     // Debug
     val DEBUG_EINK_OVERLAY_ENABLED = Setting(
         key = "debug.eink_overlay_enabled",
@@ -121,6 +167,12 @@ object AppSettings {
         REGISTRY_SIGNAL_THRESHOLD,
         REGISTRY_DEFER_DAYS,
         DEBUG_EINK_OVERLAY_ENABLED,
-        READING_VOLUME_KEYS_PAGE_TURN
+        READING_VOLUME_KEYS_PAGE_TURN,
+        ANNOTATION_INACTIVITY_TIMEOUT_MS,
+        ANNOTATION_DOUBLE_TAP_THRESHOLD_MS,
+        ANNOTATION_DOUBLE_TAP_TOLERANCE_PX,
+        PEN_STROKE_WIDTH,
+        PEN_PRESSURE_SENSITIVITY,
+        PEN_BUTTON_ACTION
     )
 }

@@ -80,4 +80,15 @@
     <string name="library_reading_status_reading">Reading</string>
     <string name="library_reading_status_finished">Finished</string>
     <string name="library_reading_status_abandoned">Abandoned</string>
+
+    <!-- Ink overlay and annotation mode (Session 5.2) -->
+    <string name="annotation_highlighter_button">Highlight</string>
+    <string name="annotation_pen_settings_button">Pen</string>
+    <string name="annotation_mode_active">● Writing</string>
+    <string name="pen_settings_title">Pen Settings</string>
+    <string name="pen_stroke_width_label">Stroke width</string>
+    <string name="pen_pressure_label">Pressure</string>
+    <string name="pen_pressure_light">Light</string>
+    <string name="pen_pressure_normal">Normal</string>
+    <string name="pen_pressure_firm">Firm</string>
 </resources>

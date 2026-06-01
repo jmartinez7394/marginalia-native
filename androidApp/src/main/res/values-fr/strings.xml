@@ -80,4 +80,15 @@
     <string name="library_reading_status_reading">TODO: En cours</string>
     <string name="library_reading_status_finished">TODO: Terminé</string>
     <string name="library_reading_status_abandoned">TODO: Abandonné</string>
+
+    <!-- Ink overlay and annotation mode (Session 5.2) -->
+    <string name="annotation_highlighter_button">TODO: Surligner</string>
+    <string name="annotation_pen_settings_button">TODO: Stylo</string>
+    <string name="annotation_mode_active">TODO: ● Écriture</string>
+    <string name="pen_settings_title">TODO: Paramètres du stylo</string>
+    <string name="pen_stroke_width_label">TODO: Épaisseur du trait</string>
+    <string name="pen_pressure_label">TODO: Pression</string>
+    <string name="pen_pressure_light">TODO: Légère</string>
+    <string name="pen_pressure_normal">TODO: Normale</string>
+    <string name="pen_pressure_firm">TODO: Ferme</string>
 </resources>
