@@ -28,6 +28,14 @@
 
     <!-- Concept registry -->
     <string name="library_concept_candidates">TODO: %d candidat(s) de concept prêts pour révision</string>
+    <string name="registry_title">TODO: Registre des concepts</string>
+    <string name="registry_filter_all">TODO: Tout</string>
+    <string name="registry_filter_settled">TODO: Établi</string>
+    <string name="registry_filter_developing">TODO: En développement</string>
+    <string name="registry_filter_seeds">TODO: Graines</string>
+    <string name="registry_empty_state">TODO: Aucun concept pour l\'instant.</string>
+    <string name="registry_search_hint">TODO: Rechercher des concepts…</string>
+    <string name="registry_editor_hint">TODO: Modifier le contenu du concept…</string>
     <string name="concept_add_to">TODO: Ajouter au concept</string>
     <string name="concept_view">TODO: Voir le concept</string>
     <string name="concept_name_hint">TODO: Nom du concept…</string>

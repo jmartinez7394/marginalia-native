@@ -28,6 +28,14 @@
 
     <!-- Concept registry -->
     <string name="library_concept_candidates">%d concept candidate(s) ready for review</string>
+    <string name="registry_title">Concept Registry</string>
+    <string name="registry_filter_all">All</string>
+    <string name="registry_filter_settled">Settled</string>
+    <string name="registry_filter_developing">Developing</string>
+    <string name="registry_filter_seeds">Seeds</string>
+    <string name="registry_empty_state">No concepts yet. Link a highlight to a concept to get started.</string>
+    <string name="registry_search_hint">Search concepts…</string>
+    <string name="registry_editor_hint">Edit concept content…</string>
     <string name="concept_add_to">Add to concept</string>
     <string name="concept_view">View concept</string>
     <string name="concept_name_hint">Concept name…</string>

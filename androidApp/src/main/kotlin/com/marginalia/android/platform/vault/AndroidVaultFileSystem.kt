@@ -34,10 +34,13 @@ class AndroidVaultFileSystem(
         Unit
     }
 
+    // Returns vault-relative paths (e.g. "library/notes/virtue-ethics.md") to match
+    // FakeVaultFileSystem behaviour — callers pass these paths back to readFile.
     override suspend fun listFiles(directory: String): List<String> = withContext(Dispatchers.IO) {
         val dir = File(vaultRoot, directory)
         if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
-        dir.listFiles()?.map { it.name } ?: emptyList()
+        val prefix = if (directory.endsWith("/")) directory else "$directory/"
+        dir.listFiles()?.map { "$prefix${it.name}" } ?: emptyList()
     }
 
     override suspend fun fileExists(path: String): Boolean = withContext(Dispatchers.IO) {

@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import com.marginalia.android.ui.library.LibraryScreen
 import com.marginalia.android.ui.reader.ReaderScreen
+import com.marginalia.android.ui.registry.ConceptRegistryScreen
 import com.marginalia.device.DeviceCapabilities
 import com.marginalia.device.DisplayRefreshManager
 import com.marginalia.device.DisplayType
@@ -38,10 +39,11 @@ class MainActivity : AppCompatActivity() {
             MaterialTheme {
                 Surface(color = Color.White) {
                     var openBookId by remember { mutableStateOf<String?>(null) }
+                    var showConceptRegistry by remember { mutableStateOf(false) }
                     val isEinkDevice = deviceCapabilities.displayType == DisplayType.EINK
 
                     AnimatedContent(
-                        targetState = openBookId,
+                        targetState = Triple(openBookId, showConceptRegistry, isEinkDevice),
                         transitionSpec = {
                             if (isEinkDevice) {
                                 ContentTransform(
@@ -53,21 +55,31 @@ class MainActivity : AppCompatActivity() {
                             }
                         },
                         label = "screen_transition"
-                    ) { bookId ->
-                        if (bookId != null) {
-                            ReaderScreen(
+                    ) { (bookId, showRegistry, _) ->
+                        when {
+                            bookId != null -> ReaderScreen(
                                 bookId = bookId,
                                 onExit = {
                                     displayRefreshManager.refreshFull()
                                     openBookId = null
                                 }
                             )
-                        } else {
-                            LibraryScreen(
+                            showRegistry -> ConceptRegistryScreen(
+                                territoryId = "library",
+                                onBack = {
+                                    displayRefreshManager.refreshFull()
+                                    showConceptRegistry = false
+                                }
+                            )
+                            else -> LibraryScreen(
                                 territoryId = "library",
                                 onBookClick = { id ->
                                     displayRefreshManager.refreshFull()
                                     openBookId = id
+                                },
+                                onConceptReviewClick = {
+                                    displayRefreshManager.refreshFull()
+                                    showConceptRegistry = true
                                 }
                             )
                         }

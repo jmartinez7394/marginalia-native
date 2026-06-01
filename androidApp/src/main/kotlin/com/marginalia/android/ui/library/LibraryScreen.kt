@@ -48,6 +48,7 @@ private val EPUB_MIME_TYPES = arrayOf("application/epub+zip", "application/pdf")
 fun LibraryScreen(
     territoryId: String,
     onBookClick: (String) -> Unit = {},
+    onConceptReviewClick: () -> Unit = {},
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     LaunchedEffect(territoryId) {
@@ -81,6 +82,7 @@ fun LibraryScreen(
                     viewModel.onAddBookTap()
                     pickEpub.launch(EPUB_MIME_TYPES)
                 },
+                onConceptReviewClick = onConceptReviewClick,
                 onScrollStart = { viewModel.onScrollActive() },
                 onScrollEnd = { viewModel.scheduleScrollSettle() }
             )
@@ -170,6 +172,7 @@ private fun LibraryBookGrid(
     pendingCandidateCount: Int = 0,
     onBookClick: (String) -> Unit,
     onAddBook: () -> Unit,
+    onConceptReviewClick: () -> Unit = {},
     onScrollStart: () -> Unit = {},
     onScrollEnd: () -> Unit = {}
 ) {
@@ -191,13 +194,14 @@ private fun LibraryBookGrid(
         ) {
             Text(stringResource(R.string.library_add_book))
         }
-        // Subtle concept candidate indicator — shown only when candidates are pending
         if (pendingCandidateCount > 0) {
             Text(
                 text = stringResource(R.string.library_concept_candidates, pendingCandidateCount),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clickable(onClick = onConceptReviewClick)
             )
         }
         LazyVerticalGrid(
