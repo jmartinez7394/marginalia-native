@@ -40,6 +40,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.marginalia.android.BuildConfig
 import com.marginalia.android.R
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
@@ -86,6 +90,14 @@ fun ReaderScreen(
             is ReaderUiState.Error -> ReaderErrorState(
                 message = state.message,
                 onBack = onExit
+            )
+        }
+
+        if (BuildConfig.DEBUG) {
+            val debugMode by viewModel.debugRefreshMode.collectAsState()
+            RefreshDebugOverlay(
+                lastMode = debugMode,
+                modifier = Modifier.align(Alignment.TopEnd)
             )
         }
     }
@@ -150,11 +162,31 @@ private fun ReadyReader(
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 
-    // Full-screen FragmentContainerView — no Compose overlay intercepts touch events,
-    // allowing the WebView to receive long-press for native text selection.
+    // Fire GC16 when app returns to foreground while the reader is open.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onForegroundRestore()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Fire DU when the colour picker bottom sheet opens.
+    LaunchedEffect(showColourPicker) {
+        if (showColourPicker) viewModel.onAnnotationOpen()
+    }
+
+    // Full-screen FragmentContainerView. Background matches reading theme to prevent
+    // white flash on WebView initialise and reflow.
     AndroidView(
         factory = { ctx ->
-            FragmentContainerView(ctx).apply { id = containerId }
+            FragmentContainerView(ctx).apply {
+                id = containerId
+                setBackgroundColor(Color.WHITE)
+            }
         },
         modifier = Modifier.fillMaxSize()
     )
@@ -185,9 +217,11 @@ private fun ReadyReader(
             Log.d(TAG, "EpubNavigatorFragment added: $fragment")
 
             if (fragment != null) {
-                // Use Readium's InputListener for tap-based page navigation.
-                // This fires after the WebView processes the tap, so long-press
-                // (which the WebView uses for text selection) is never intercepted.
+                // Set the fragment root background to match reading theme — prevents white flash.
+                fragment.view?.setBackgroundColor(Color.WHITE)
+
+                // InputListener wired after the WebView processes taps, so long-press (text
+                // selection) is never intercepted. onDrag fires during scroll and selection drag.
                 val tapListener = object : InputListener {
                     override fun onTap(event: TapEvent): Boolean {
                         val widthPx = fragment.view?.width?.toFloat() ?: return false
@@ -205,7 +239,13 @@ private fun ReadyReader(
                             else -> false
                         }
                     }
-                    override fun onDrag(event: DragEvent): Boolean = false
+                    override fun onDrag(event: DragEvent): Boolean {
+                        // Fires during both text-selection drag (A2 = selection expand)
+                        // and scroll drag (A2 = scroll active). Both are correct per spec.
+                        viewModel.onScrollActive()
+                        viewModel.scheduleScrollSettle()
+                        return false
+                    }
                     override fun onKey(event: KeyEvent): Boolean = false
                 }
                 fragment.addInputListener(tapListener)
@@ -275,6 +315,7 @@ private fun ReadyReader(
             val now = System.currentTimeMillis()
             if (text != stableText) {
                 Log.d(TAG, "Selection detected: text='$text' href='$href' cfi='$cfi'")
+                viewModel.onTextSelectionStart()
                 stableText = text
                 stableCfi = cfi
                 stableHref = href
@@ -286,6 +327,7 @@ private fun ReadyReader(
                 if (href.isNotEmpty()) stableHref = href
                 if (locatorJson.isNotEmpty()) stableLocatorJson = locatorJson
                 if (now - stableStart >= SELECTION_STABLE_MS) {
+                    viewModel.onTextSelectionEnd()
                     pendingSelectionCfi = stableCfi
                     pendingSelectionHref = stableHref
                     pendingSelectionLocatorJson = stableLocatorJson

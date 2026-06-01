@@ -3,21 +3,26 @@ package com.marginalia.android.ui.reader
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.marginalia.android.di.AppSettings
 import com.marginalia.android.platform.reader.OpenPublicationResult
 import com.marginalia.android.platform.reader.ReadiumBookOpener
 import com.marginalia.animachora.Territory
 import com.marginalia.animachora.TerritoryDefaults
 import com.marginalia.animachora.TerritoryType
 import com.marginalia.device.DisplayRefreshManager
+import com.marginalia.device.RefreshMode
 import com.marginalia.model.Book
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
 import com.marginalia.model.Result
+import com.marginalia.settings.SettingsRegistry
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
 import com.marginalia.vault.LinkedNoteService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,7 +47,8 @@ class ReaderViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val highlightRepository: HighlightRepository,
     private val linkedNoteService: LinkedNoteService,
-    private val displayRefreshManager: DisplayRefreshManager
+    private val displayRefreshManager: DisplayRefreshManager,
+    private val settingsRegistry: SettingsRegistry
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
@@ -51,9 +57,13 @@ class ReaderViewModel @Inject constructor(
     private val _highlights = MutableStateFlow<List<Highlight>>(emptyList())
     val currentHighlights: StateFlow<List<Highlight>> = _highlights.asStateFlow()
 
+    private val _debugRefreshMode = MutableStateFlow<RefreshMode?>(null)
+    val debugRefreshMode: StateFlow<RefreshMode?> = _debugRefreshMode.asStateFlow()
+
     private var openPublication: Publication? = null
     private var currentBookId: String? = null
     private var currentBook: Book? = null
+    private var scrollSettleJob: Job? = null
 
     fun openBook(bookId: String) {
         viewModelScope.launch {
@@ -108,6 +118,7 @@ class ReaderViewModel @Inject constructor(
                     val updated = _highlights.value + highlight
                     _highlights.value = updated
                     Log.d(TAG, "Highlight created: ${highlight.id}")
+                    onHighlightApplied()
                     updateLinkedNote(bookId, updated)
                 }
                 is Result.Failure ->
@@ -129,6 +140,61 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    // --- Refresh events ---
+
+    fun onPageTurn() {
+        displayRefreshManager.refreshFull()
+        _debugRefreshMode.value = RefreshMode.GC16
+    }
+
+    fun onChapterNav() {
+        displayRefreshManager.refreshFull()
+        _debugRefreshMode.value = RefreshMode.GC16
+    }
+
+    fun onScrollActive() {
+        scrollSettleJob?.cancel()
+        displayRefreshManager.refreshFast()
+        _debugRefreshMode.value = RefreshMode.A2
+    }
+
+    fun scheduleScrollSettle() {
+        scrollSettleJob?.cancel()
+        val thresholdMs = settingsRegistry.get(AppSettings.REFRESH_SCROLL_PAUSE_MS).toLong()
+        scrollSettleJob = viewModelScope.launch {
+            delay(thresholdMs)
+            displayRefreshManager.refreshRegalFull()
+            _debugRefreshMode.value = RefreshMode.REGAL
+        }
+    }
+
+    fun onTextSelectionStart() {
+        displayRefreshManager.refreshDU()
+        _debugRefreshMode.value = RefreshMode.DU
+    }
+
+    fun onTextSelectionEnd() {
+        displayRefreshManager.refreshRegalFull()
+        _debugRefreshMode.value = RefreshMode.REGAL
+    }
+
+    fun onAnnotationOpen() {
+        displayRefreshManager.refreshDU()
+        _debugRefreshMode.value = RefreshMode.DU
+    }
+
+    fun onForegroundRestore() {
+        displayRefreshManager.refreshFull()
+        _debugRefreshMode.value = RefreshMode.GC16
+    }
+
+    private fun onHighlightApplied() {
+        displayRefreshManager.refreshRegalFull()
+        _debugRefreshMode.value = RefreshMode.REGAL
+    }
+
+    // --- End refresh events ---
+
     private suspend fun updateLinkedNote(bookId: String, highlights: List<Highlight>) {
         val book = currentBook ?: return
         val territory = bookToTerritory(book)
@@ -137,7 +203,6 @@ class ReaderViewModel @Inject constructor(
             when (val result = linkedNoteService.createLinkedNote(book, territory)) {
                 is Result.Success -> {
                     Log.d(TAG, "Linked note created for $bookId")
-                    // updateLinkedNote with highlights on the freshly created note
                     linkedNoteService.updateLinkedNote(result.value, highlights)
                 }
                 is Result.Failure ->
@@ -166,16 +231,13 @@ class ReaderViewModel @Inject constructor(
         lastEnteredAt = null
     )
 
-    fun onPageTurn() {
-        displayRefreshManager.refreshFull()
-    }
-
     fun updateProgress(locator: Locator) {
         // Progress persistence deferred to reading progress session
     }
 
     override fun onCleared() {
         super.onCleared()
+        scrollSettleJob?.cancel()
         openPublication?.let { bookOpener.close(it) }
         openPublication = null
     }

@@ -2,6 +2,7 @@ package com.marginalia.device
 
 interface DisplayRefreshManager {
     fun refreshFull()
+    fun refreshRegalFull()
     fun refreshPartial(bounds: RefreshBounds)
     fun refreshFast()
     fun refreshDU()
@@ -15,6 +16,7 @@ data class RefreshBounds(val left: Int, val top: Int, val right: Int, val bottom
 class NoOpDisplayRefreshManager : DisplayRefreshManager {
     override var currentMode: RefreshMode = RefreshMode.GC16
     override fun refreshFull() {}
+    override fun refreshRegalFull() {}
     override fun refreshPartial(bounds: RefreshBounds) {}
     override fun refreshFast() {}
     override fun refreshDU() {}

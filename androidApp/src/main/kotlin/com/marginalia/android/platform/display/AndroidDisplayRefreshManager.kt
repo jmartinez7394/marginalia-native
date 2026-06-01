@@ -1,8 +1,9 @@
 package com.marginalia.android.platform.display
 
 import android.content.Context
-import android.view.View
+import android.util.Log
 import com.marginalia.device.DisplayRefreshManager
+
 import com.marginalia.device.RefreshBounds
 import com.marginalia.device.RefreshMode
 
@@ -15,21 +16,31 @@ class AndroidDisplayRefreshManager(
 
     override fun refreshFull() {
         currentMode = RefreshMode.GC16
+        Log.d(TAG, "refresh: GC16 (full)")
         tryOnyxRefresh(ONYX_MODE_GC16, null)
+    }
+
+    override fun refreshRegalFull() {
+        currentMode = RefreshMode.REGAL
+        Log.d(TAG, "refresh: REGAL (full)")
+        tryOnyxRefresh(ONYX_MODE_REGAL, null)
     }
 
     override fun refreshPartial(bounds: RefreshBounds) {
         currentMode = RefreshMode.REGAL
+        Log.d(TAG, "refresh: REGAL (partial ${bounds.left},${bounds.top}-${bounds.right},${bounds.bottom})")
         tryOnyxRefresh(ONYX_MODE_REGAL, bounds)
     }
 
     override fun refreshFast() {
         currentMode = RefreshMode.A2
+        Log.d(TAG, "refresh: A2")
         tryOnyxRefresh(ONYX_MODE_A2, null)
     }
 
     override fun refreshDU() {
         currentMode = RefreshMode.DU
+        Log.d(TAG, "refresh: DU")
         tryOnyxRefresh(ONYX_MODE_DU, null)
     }
 
@@ -61,6 +72,7 @@ class AndroidDisplayRefreshManager(
     }
 
     companion object {
+        private const val TAG = "DisplayRefreshManager"
         private const val ONYX_MODE_GC16 = 2
         private const val ONYX_MODE_REGAL = 9
         private const val ONYX_MODE_A2 = 4
