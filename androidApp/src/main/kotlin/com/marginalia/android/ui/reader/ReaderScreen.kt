@@ -692,7 +692,7 @@ private fun ReadyReader(
         if (annotation != null) {
             AnnotationManagementSheet(
                 annotation = annotation,
-                onTranscribe = { /* Session 5.8 */ selectedAnnotationId = null },
+                viewModel = viewModel,
                 onDelete = { annotationId ->
                     viewModel.deleteAnnotation(annotationId)
                     selectedAnnotationId = null
@@ -1333,11 +1333,20 @@ private fun HighlightColourPicker(
 
 // --- Annotation management composables ---
 
+private sealed class TState {
+    object Idle : TState()
+    object Loading : TState()
+    object NeedApiKey : TState()
+    data class AwaitingConfirm(val text: String, val wikilinks: List<String>) : TState()
+    data class Done(val text: String) : TState()
+    data class Err(val msg: String) : TState()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AnnotationManagementSheet(
     annotation: com.marginalia.model.MarginAnnotation,
-    onTranscribe: () -> Unit,
+    viewModel: ReaderViewModel,
     onDelete: (String) -> Unit,
     onPromote: () -> Unit,
     onDismiss: () -> Unit
@@ -1345,6 +1354,13 @@ private fun AnnotationManagementSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    var tState by remember(annotation.annotationId) {
+        mutableStateOf<TState>(
+            annotation.transcription?.let { TState.Done(it) } ?: TState.Idle
+        )
+    }
+    var apiKeyInput by remember { mutableStateOf("") }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1357,19 +1373,106 @@ private fun AnnotationManagementSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Transcription status
-            val transcriptionText = annotation.transcription?.takeIf { it.isNotBlank() }
-                ?: stringResource(R.string.annotation_transcription_pending)
-            Text(
-                text = transcriptionText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-
-            // Transcribe button (always shown — shows error in 5.8 if no API key)
-            Button(onClick = onTranscribe, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.annotation_transcribe))
+            when (val state = tState) {
+                is TState.Idle -> {
+                    Text(
+                        text = stringResource(R.string.annotation_transcription_pending),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = {
+                            tState = TState.Loading
+                            scope.launch {
+                                tState = when (val result = viewModel.transcribeAnnotation(annotation.annotationId)) {
+                                    is TranscriptionResult.Success ->
+                                        if (result.wikilinks.isEmpty()) TState.Done(result.text)
+                                        else TState.AwaitingConfirm(result.text, result.wikilinks)
+                                    is TranscriptionResult.NeedApiKey -> TState.NeedApiKey
+                                    is TranscriptionResult.Error -> TState.Err(result.message)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(stringResource(R.string.annotation_transcribe)) }
+                }
+                is TState.Loading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.annotation_transcribe) + "…",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
+                is TState.NeedApiKey -> {
+                    Text(
+                        text = "Anthropic API key required",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    OutlinedTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("sk-ant-…") },
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            if (apiKeyInput.isNotBlank()) {
+                                scope.launch {
+                                    viewModel.storeApiKey(apiKeyInput)
+                                    tState = TState.Idle
+                                    apiKeyInput = ""
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = apiKeyInput.isNotBlank()
+                    ) { Text(stringResource(R.string.highlight_annotation_save)) }
+                }
+                is TState.AwaitingConfirm -> {
+                    Text(state.text, style = MaterialTheme.typography.bodySmall)
+                    if (state.wikilinks.isNotEmpty()) {
+                        Text(
+                            text = "Concept links found:",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            state.wikilinks.forEach { wikilink ->
+                                OutlinedButton(
+                                    onClick = { /* TODO: create concept in 5.8+ */ },
+                                    modifier = Modifier.wrapContentSize()
+                                ) {
+                                    Text("[[${wikilink}]]", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = { tState = TState.Done(state.text) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(stringResource(R.string.highlight_annotation_save)) }
+                }
+                is TState.Done -> {
+                    Text(state.text, style = MaterialTheme.typography.bodySmall)
+                }
+                is TState.Err -> {
+                    Text(
+                        text = state.msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Button(onClick = { tState = TState.Idle }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.annotation_transcribe))
+                    }
+                }
             }
 
             // Promote to standalone note

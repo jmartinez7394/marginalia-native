@@ -73,6 +73,9 @@ dependencies {
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
 
+    // Encrypted key storage for AI provider keys
+    implementation(libs.androidx.security.crypto)
+
     // Core library desugaring (required by Readium)
     coreLibraryDesugaring(libs.android.desugar.jdk)
 

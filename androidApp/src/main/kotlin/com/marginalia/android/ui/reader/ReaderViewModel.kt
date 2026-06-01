@@ -3,7 +3,10 @@ package com.marginalia.android.ui.reader
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.marginalia.ai.AIProvider
+import com.marginalia.ai.KeyRepository
 import com.marginalia.android.di.AppSettings
+import com.marginalia.android.platform.ink.StrokeRasteriser
 import com.marginalia.android.platform.ink.SvgGenerator
 import com.marginalia.android.platform.reader.OpenPublicationResult
 import com.marginalia.android.platform.reader.ReadiumBookOpener
@@ -41,6 +44,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
@@ -66,6 +70,12 @@ private data class MarginAnnotationSession(
     var currentStrokePoints: MutableList<StrokePoint> = mutableListOf()
 )
 
+sealed class TranscriptionResult {
+    data class Success(val text: String, val wikilinks: List<String>) : TranscriptionResult()
+    data class NeedApiKey(val providerId: String) : TranscriptionResult()
+    data class Error(val message: String) : TranscriptionResult()
+}
+
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
     private val bookOpener: ReadiumBookOpener,
@@ -77,7 +87,9 @@ class ReaderViewModel @Inject constructor(
     private val conceptRegistry: ConceptRegistry,
     private val fileSystem: VaultFileSystem,
     private val displayRefreshManager: DisplayRefreshManager,
-    private val settingsRegistry: SettingsRegistry
+    private val settingsRegistry: SettingsRegistry,
+    private val aiProvider: AIProvider,
+    private val keyRepository: KeyRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
@@ -614,6 +626,107 @@ class ReaderViewModel @Inject constructor(
         inactivityTimeoutJob?.cancel()
         openPublication?.let { bookOpener.close(it) }
         openPublication = null
+    }
+
+    suspend fun transcribeAnnotation(annotationId: String): TranscriptionResult {
+        if (!keyRepository.hasKey(aiProvider.providerId)) {
+            return TranscriptionResult.NeedApiKey(aiProvider.providerId)
+        }
+        val annotation = getAnnotation(annotationId)
+            ?: return TranscriptionResult.Error("Annotation not found")
+        val strokes = _annotationStrokes.value[annotationId] ?: emptyList()
+        val book = currentBook ?: return TranscriptionResult.Error("No book open")
+
+        return withContext(Dispatchers.Default) {
+            val pngBytes = StrokeRasteriser.rasterise(strokes)
+            val prompt = buildTranscriptionPrompt(annotation, book)
+            when (val result = aiProvider.transcribe(pngBytes, prompt)) {
+                is Result.Success -> {
+                    val text = result.value
+                    val transcription = extractTranscription(text)
+                    val wikilinks = extractWikilinks(text)
+                    if (transcription.isNotBlank()) {
+                        saveTranscription(annotation, transcription, book)
+                    }
+                    TranscriptionResult.Success(transcription, wikilinks)
+                }
+                is Result.Failure -> TranscriptionResult.Error(result.error.toString())
+            }
+        }
+    }
+
+    suspend fun storeApiKey(key: String) {
+        keyRepository.storeKey(aiProvider.providerId, key.trim())
+    }
+
+    private suspend fun saveTranscription(
+        annotation: MarginAnnotation,
+        transcription: String,
+        book: Book
+    ) {
+        val updated = annotation.copy(
+            transcription = transcription,
+            processed = true,
+            processedAt = System.currentTimeMillis()
+        )
+        annotationRepository.updateAnnotation(updated)
+        _currentAnnotations.value = _currentAnnotations.value.map {
+            if (it.annotationId == updated.annotationId) updated else it
+        }
+        // Replace linked note placeholder with actual transcription
+        val linkedNote = com.marginalia.model.LinkedNote(
+            id = book.id, bookId = book.id,
+            filePath = annotation.linkedNotePath,
+            title = "${book.title} - ${book.author}",
+            createdAt = 0L, lastModifiedAt = System.currentTimeMillis(),
+            territoryId = book.territoryId
+        )
+        replaceMarginNotePlaceholder(linkedNote, annotation.annotationId, transcription)
+    }
+
+    private suspend fun replaceMarginNotePlaceholder(
+        linkedNote: com.marginalia.model.LinkedNote,
+        annotationId: String,
+        transcription: String
+    ) {
+        val existing = fileSystem.readFile(linkedNote.filePath) ?: return
+        val blockId = "^margin-$annotationId"
+        if (!existing.contains(blockId)) return
+        val updated = existing.replace(
+            "*[Handwritten margin note — transcription pending]*",
+            transcription
+        )
+        fileSystem.writeFile(linkedNote.filePath, updated)
+        Log.d(TAG, "Replaced margin placeholder for $annotationId")
+    }
+
+    private fun buildTranscriptionPrompt(annotation: MarginAnnotation, book: Book) = buildString {
+        append("Transcribe the handwritten text in this image.\n")
+        append("Book: ${book.title} by ${book.author}\n")
+        annotation.chapterLabel?.let { append("Chapter: $it\n") }
+        annotation.anchoredPassageText?.takeIf { it.isNotBlank() }?.let {
+            append("Passage context: \"${it.take(200)}\"\n")
+        }
+        append("\nProvide:\n1. Exact transcription of the handwriting\n")
+        append("2. Concept terms worth tracking as [[wikilinks]] if any\n\n")
+        append("Format exactly as:\nTRANSCRIPTION: [your transcription]\n")
+        append("WIKILINKS: [[term1]], [[term2]] (or 'none')")
+    }
+
+    private fun extractTranscription(response: String): String {
+        val match = Regex("TRANSCRIPTION:\\s*(.+?)(?=\\nWIKILINKS:|$)", RegexOption.DOT_MATCHES_ALL)
+            .find(response)
+        return match?.groupValues?.getOrNull(1)?.trim() ?: response.trim()
+    }
+
+    private fun extractWikilinks(response: String): List<String> {
+        val wiklinksSection = response.substringAfter("WIKILINKS:", "").trim()
+        if (wiklinksSection.isBlank() || wiklinksSection.lowercase() == "none") return emptyList()
+        return Regex("""\[\[([^\]]+)\]\]""").findAll(wiklinksSection)
+            .map { it.groupValues[1].trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
     }
 
     fun getAnnotation(annotationId: String): MarginAnnotation? =

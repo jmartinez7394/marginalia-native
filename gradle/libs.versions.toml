@@ -32,6 +32,7 @@ android-desugar-jdk = { group = "com.android.tools", name = "desugar_jdk_libs", 
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version = "1.7.0" }
 androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose" }
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version = "1.1.0-alpha06" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
