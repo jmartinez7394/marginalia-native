@@ -91,7 +91,13 @@ class MainActivity : AppCompatActivity() {
                                     displayRefreshManager.refreshFull()
                                     openBookId = id
                                 },
+                                // Indicator badge → candidate review directly (clear entry point)
                                 onConceptReviewClick = {
+                                    displayRefreshManager.refreshFull()
+                                    showCandidateReview = true
+                                },
+                                // Secondary registry access (concept list)
+                                onConceptRegistryClick = {
                                     displayRefreshManager.refreshFull()
                                     showConceptRegistry = true
                                 }

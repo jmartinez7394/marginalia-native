@@ -49,6 +49,7 @@ fun LibraryScreen(
     territoryId: String,
     onBookClick: (String) -> Unit = {},
     onConceptReviewClick: () -> Unit = {},
+    onConceptRegistryClick: () -> Unit = {},
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     LaunchedEffect(territoryId) {
@@ -85,6 +86,7 @@ fun LibraryScreen(
                     pickEpub.launch(EPUB_MIME_TYPES)
                 },
                 onConceptReviewClick = onConceptReviewClick,
+                onConceptRegistryClick = onConceptRegistryClick,
                 onScrollStart = { viewModel.onScrollActive() },
                 onScrollEnd = { viewModel.scheduleScrollSettle() }
             )
@@ -176,6 +178,7 @@ private fun LibraryBookGrid(
     onBookClick: (String) -> Unit,
     onAddBook: () -> Unit,
     onConceptReviewClick: () -> Unit = {},
+    onConceptRegistryClick: () -> Unit = {},
     onScrollStart: () -> Unit = {},
     onScrollEnd: () -> Unit = {}
 ) {
@@ -197,16 +200,29 @@ private fun LibraryBookGrid(
         ) {
             Text(stringResource(R.string.library_add_book))
         }
+        // Concept review indicator — prominent button when candidates pending
         if (pendingCandidateCount > 0) {
-            Text(
-                text = stringResource(R.string.library_concept_candidates, pendingCandidateCount),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Button(
+                onClick = onConceptReviewClick,
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .clickable(onClick = onConceptReviewClick)
-            )
+                    .padding(horizontal = 12.dp)
+                    .fillMaxWidth()
+            ) {
+                Text(
+                    text = stringResource(R.string.library_concept_candidates, pendingCandidateCount),
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
         }
+        // Secondary access to full concept registry
+        Text(
+            text = stringResource(R.string.library_concept_registry_link),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 2.dp)
+                .clickable(onClick = onConceptRegistryClick)
+        )
         LazyVerticalGrid(
             state = lazyGridState,
             columns = GridCells.Fixed(2),

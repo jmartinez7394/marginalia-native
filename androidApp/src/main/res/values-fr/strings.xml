@@ -45,6 +45,7 @@
 
     <!-- Concept registry -->
     <string name="library_concept_candidates">TODO: %d candidat(s) de concept prêts pour révision</string>
+    <string name="library_concept_registry_link">TODO: Registre des concepts →</string>
     <string name="registry_title">TODO: Registre des concepts</string>
     <string name="registry_filter_all">TODO: Tout</string>
     <string name="registry_filter_settled">TODO: Établi</string>

@@ -436,6 +436,9 @@ private fun ReadyReader(
                 }
                 showHighlightsPanel = false
             },
+            onDeleteHighlight = { h ->
+                viewModel.deleteHighlight(h.id)
+            },
             onDismiss = { showHighlightsPanel = false }
         )
     }
@@ -562,6 +565,7 @@ private fun ReaderChromeOverlay(
 private fun HighlightsPanel(
     highlights: List<Highlight>,
     onHighlightClick: (Highlight) -> Unit,
+    onDeleteHighlight: (Highlight) -> Unit,
     onDismiss: () -> Unit
 ) {
     var filterColour by remember { mutableStateOf<HighlightColour?>(null) }
@@ -635,7 +639,11 @@ private fun HighlightsPanel(
             } else {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     items(filtered, key = { it.id }) { h ->
-                        HighlightPanelItem(h, onHighlightClick)
+                        HighlightPanelItem(
+                            highlight = h,
+                            onClick = onHighlightClick,
+                            onDelete = onDeleteHighlight
+                        )
                     }
                 }
             }
@@ -652,43 +660,65 @@ private fun colourLabel(colour: HighlightColour) = when (colour) {
 }
 
 @Composable
-private fun HighlightPanelItem(highlight: Highlight, onClick: (Highlight) -> Unit) {
+private fun HighlightPanelItem(
+    highlight: Highlight,
+    onClick: (Highlight) -> Unit,
+    onDelete: (Highlight) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick(highlight) }
             .padding(vertical = 8.dp)
     ) {
-        Text(
-            text = "\"${highlight.text.take(100)}${if (highlight.text.length > 100) "…" else ""}\"",
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 2.dp)
+        // Tappable text content — navigates to highlight in reader
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick(highlight) }
         ) {
             Text(
-                text = highlight.colour.name.lowercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "\"${highlight.text.take(100)}${if (highlight.text.length > 100) "…" else ""}\"",
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
-            highlight.emotionalTag?.let { tag ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 2.dp)
+            ) {
                 Text(
-                    text = tag.name.lowercase(),
+                    text = highlight.colour.name.lowercase(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                highlight.emotionalTag?.let { tag ->
+                    Text(
+                        text = tag.name.lowercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            highlight.annotation?.takeIf { it.isNotEmpty() }?.let { ann ->
+                Text(
+                    text = ann.take(80),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontStyle = FontStyle.Italic,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
         }
-        highlight.annotation?.takeIf { it.isNotEmpty() }?.let { ann ->
+        // Visible delete button — always shown, no gesture required (e-ink safe)
+        OutlinedButton(
+            onClick = { onDelete(highlight) },
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .fillMaxWidth()
+        ) {
             Text(
-                text = ann.take(80),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontStyle = FontStyle.Italic,
-                modifier = Modifier.padding(top = 2.dp)
+                text = stringResource(R.string.highlight_annotation_delete),
+                style = MaterialTheme.typography.labelSmall
             )
         }
         Divider(modifier = Modifier.padding(top = 8.dp))

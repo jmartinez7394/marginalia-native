@@ -45,6 +45,7 @@
 
     <!-- Concept registry -->
     <string name="library_concept_candidates">%d concept candidate(s) ready for review</string>
+    <string name="library_concept_registry_link">Concept Registry →</string>
     <string name="registry_title">Concept Registry</string>
     <string name="registry_filter_all">All</string>
     <string name="registry_filter_settled">Settled</string>
