@@ -336,7 +336,9 @@ private fun ReadyReader(
             InkOverlayView(ctx).also { overlay ->
                 inkOverlayRef.value = overlay
                 overlay.onDoubleTap = { viewModel.activateAnnotationMode() }
-                overlay.onAnnotationStroke = { viewModel.resetAnnotationInactivityTimer() }
+                overlay.onStrokeBegin = { x, y, p, t -> viewModel.onAnnotationStrokeBegin(x, y, p, t) }
+                overlay.onStrokePoint = { x, y, p, t -> viewModel.onAnnotationStrokePoint(x, y, p, t) }
+                overlay.onStrokeComplete = { viewModel.onAnnotationStrokeComplete() }
                 overlay.setBackgroundColor(Color.TRANSPARENT)
             }
         },
