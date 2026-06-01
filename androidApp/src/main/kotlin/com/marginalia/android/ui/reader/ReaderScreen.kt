@@ -1,5 +1,8 @@
 package com.marginalia.android.ui.reader
 
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -37,6 +40,8 @@ import com.marginalia.android.R
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.publication.Publication
+
+private const val TAG = "ReaderScreen"
 
 @Composable
 fun ReaderScreen(
@@ -121,28 +126,46 @@ private fun ReadyReader(
     )
 
     DisposableEffect(publication) {
-        val navigatorFactory = EpubNavigatorFactory(publication)
-        val fragmentFactory = navigatorFactory.createFragmentFactory(initialLocator = null)
+        val handler = Handler(Looper.getMainLooper())
 
-        // Install the factory so the fragment manager can instantiate the navigator
-        fragmentManager.fragmentFactory = fragmentFactory
-        fragmentManager.beginTransaction()
-            .replace(containerId, EpubNavigatorFragment::class.java, null)
-            .commitNow()
+        // Post to the next message-loop iteration so the FragmentContainerView
+        // is guaranteed to be in the window hierarchy before commitNow() runs.
+        val addFragmentRunnable = Runnable {
+            if (fragmentManager.isStateSaved) return@Runnable
 
-        navigatorFragment = fragmentManager.findFragmentById(containerId) as? EpubNavigatorFragment
+            val existing = fragmentManager.findFragmentById(containerId) as? EpubNavigatorFragment
+            if (existing != null) {
+                Log.d(TAG, "EpubNavigatorFragment already present, reusing")
+                navigatorFragment = existing
+                return@Runnable
+            }
+
+            Log.d(TAG, "Adding EpubNavigatorFragment to container $containerId")
+            val navigatorFactory = EpubNavigatorFactory(publication)
+            val fragmentFactory = navigatorFactory.createFragmentFactory(initialLocator = null)
+            fragmentManager.fragmentFactory = fragmentFactory
+            fragmentManager.beginTransaction()
+                .replace(containerId, EpubNavigatorFragment::class.java, null)
+                .commitNow()
+            navigatorFragment = fragmentManager.findFragmentById(containerId) as? EpubNavigatorFragment
+            Log.d(TAG, "EpubNavigatorFragment added: $navigatorFragment")
+        }
+
+        handler.post(addFragmentRunnable)
 
         onDispose {
+            handler.removeCallbacks(addFragmentRunnable)
             navigatorFragment = null
             if (!fragmentManager.isStateSaved) {
                 fragmentManager.findFragmentById(containerId)?.let {
-                    fragmentManager.beginTransaction().remove(it).commitNow()
+                    Log.d(TAG, "Removing EpubNavigatorFragment")
+                    fragmentManager.beginTransaction().remove(it).commitAllowingStateLoss()
                 }
             }
         }
     }
 
-    // Gesture overlay for tap zones and swipe-to-exit
+    // Gesture overlay — tap zones and swipe-to-exit
     var swipeStartY by remember { mutableFloatStateOf(0f) }
 
     Box(
@@ -161,7 +184,6 @@ private fun ReadyReader(
                             fragment.goForward(animated = false)
                             onPageTurn()
                         }
-                        // Centre zone (40%): reader chrome — deferred to navigation session
                     }
                 }
             }
@@ -171,7 +193,6 @@ private fun ReadyReader(
                     onDragEnd = {},
                     onDragCancel = {}
                 ) { _, dragAmount ->
-                    // Swipe down from the top 15% of screen exits the reader
                     if (swipeStartY < size.height * 0.15f && dragAmount > 40f) {
                         onExit()
                     }

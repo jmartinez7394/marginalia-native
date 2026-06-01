@@ -49,6 +49,7 @@ class ReaderViewModel @Inject constructor(
             when (val result = bookOpener.open(book.filePath, book.format)) {
                 is OpenPublicationResult.Success -> {
                     openPublication = result.publication
+                    android.util.Log.d("ReaderViewModel", "Publication opened, emitting Ready")
                     _uiState.value = ReaderUiState.Ready(
                         publication = result.publication,
                         initialLocator = null
