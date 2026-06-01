@@ -2,12 +2,14 @@ package com.marginalia.android.di
 
 import android.content.Context
 import com.marginalia.android.platform.vault.AndroidLinkedNoteService
+import com.marginalia.android.platform.vault.AndroidMarginAnnotationRepository
 import com.marginalia.android.platform.vault.AndroidVaultFileSystem
 import com.marginalia.android.platform.vault.BookFileRepository
 import com.marginalia.vault.HighlightFileRepository
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
 import com.marginalia.vault.LinkedNoteService
+import com.marginalia.vault.MarginAnnotationRepository
 import com.marginalia.vault.ConceptFileRegistry
 import com.marginalia.vault.ConceptRegistry
 import com.marginalia.vault.RegistrySignalFileService
@@ -65,4 +67,12 @@ object VaultModule {
     @Singleton
     fun provideConceptRegistry(fileSystem: VaultFileSystem): ConceptRegistry =
         ConceptFileRegistry(fileSystem, todayIso = { LocalDate.now().toString() })
+
+    @Provides
+    @Singleton
+    fun provideMarginAnnotationRepository(
+        fileSystem: VaultFileSystem,
+        libraryRepository: LibraryRepository
+    ): MarginAnnotationRepository =
+        AndroidMarginAnnotationRepository(fileSystem, libraryRepository)
 }
