@@ -14,6 +14,14 @@
     <string name="reader_error_back">Back to library</string>
     <string name="reader_exit_confirmation">Leave your book?</string>
 
+    <!-- Highlight colour picker -->
+    <string name="highlight_colour_yellow">Yellow</string>
+    <string name="highlight_colour_green">Green</string>
+    <string name="highlight_colour_blue">Blue</string>
+    <string name="highlight_colour_pink">Pink</string>
+    <string name="highlight_add_annotation">Add annotation</string>
+    <string name="highlight_delete">Delete highlight</string>
+
     <!-- Reading status labels -->
     <string name="library_reading_status_unread">Unread</string>
     <string name="library_reading_status_reading">Reading</string>
