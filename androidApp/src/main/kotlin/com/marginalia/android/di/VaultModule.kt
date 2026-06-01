@@ -1,11 +1,13 @@
 package com.marginalia.android.di
 
 import android.content.Context
+import com.marginalia.android.platform.vault.AndroidLinkedNoteService
 import com.marginalia.android.platform.vault.AndroidVaultFileSystem
 import com.marginalia.android.platform.vault.BookFileRepository
 import com.marginalia.vault.HighlightFileRepository
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
+import com.marginalia.vault.LinkedNoteService
 import com.marginalia.vault.VaultFileSystem
 import dagger.Module
 import dagger.Provides
@@ -43,4 +45,9 @@ object VaultModule {
         libraryRepository: LibraryRepository
     ): HighlightRepository =
         HighlightFileRepository(fileSystem, libraryRepository)
+
+    @Provides
+    @Singleton
+    fun provideLinkedNoteService(fileSystem: VaultFileSystem): LinkedNoteService =
+        AndroidLinkedNoteService(fileSystem)
 }
