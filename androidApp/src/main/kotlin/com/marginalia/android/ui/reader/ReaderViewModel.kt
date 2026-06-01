@@ -14,6 +14,8 @@ import com.marginalia.device.RefreshMode
 import com.marginalia.model.Book
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
+import com.marginalia.model.ReadingProgress
+import com.marginalia.model.ReadingStatus
 import com.marginalia.model.Result
 import com.marginalia.settings.SettingsRegistry
 import com.marginalia.vault.HighlightRepository
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import java.util.UUID
@@ -79,13 +82,26 @@ class ReaderViewModel @Inject constructor(
             val highlights = highlightRepository.getHighlights(bookId)
             _highlights.value = highlights
 
+            // Restore last reading position from saved progress.
+            val savedLocator: Locator? = book.readingProgress.cfi?.takeIf { it.isNotEmpty() }?.let { stored ->
+                try {
+                    Locator.fromJSON(JSONObject(stored))
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not restore reading position: ${e.message}")
+                    null
+                }
+            }
+            if (savedLocator != null) {
+                Log.d(TAG, "Restoring position: ${(book.readingProgress.percentage * 100).toInt()}%")
+            }
+
             when (val result = bookOpener.open(book.filePath, book.format)) {
                 is OpenPublicationResult.Success -> {
                     openPublication = result.publication
                     Log.d(TAG, "Publication opened, emitting Ready")
                     _uiState.value = ReaderUiState.Ready(
                         publication = result.publication,
-                        initialLocator = null
+                        initialLocator = savedLocator
                     )
                 }
                 is OpenPublicationResult.FileNotFound ->
@@ -232,7 +248,30 @@ class ReaderViewModel @Inject constructor(
     )
 
     fun updateProgress(locator: Locator) {
-        // Progress persistence deferred to reading progress session
+        val book = currentBook ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val locatorJson = try { locator.toJSON().toString() } catch (e: Exception) { null }
+            val percentage = locator.locations.progression?.toFloat()
+                ?: book.readingProgress.percentage
+            val updatedBook = book.copy(
+                readingProgress = ReadingProgress.create(
+                    cfi = locatorJson,
+                    pageNumber = null,
+                    percentage = percentage,
+                    lastReadAt = System.currentTimeMillis()
+                ),
+                status = if (book.status == ReadingStatus.UNREAD) ReadingStatus.READING
+                         else book.status,
+                lastOpenedAt = System.currentTimeMillis()
+            )
+            currentBook = updatedBook
+            when (val result = libraryRepository.updateBook(updatedBook)) {
+                is Result.Success ->
+                    Log.d(TAG, "Progress saved: ${(percentage * 100).toInt()}%")
+                is Result.Failure ->
+                    Log.e(TAG, "Failed to save progress: ${result.error}")
+            }
+        }
     }
 
     override fun onCleared() {

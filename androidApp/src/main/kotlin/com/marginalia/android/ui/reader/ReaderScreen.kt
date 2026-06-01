@@ -54,6 +54,8 @@ import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.SelectableNavigator
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.preferences.Spread
 import org.readium.r2.navigator.input.DragEvent
 import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.input.KeyEvent
@@ -84,6 +86,7 @@ fun ReaderScreen(
             is ReaderUiState.Loading -> ReaderLoadingState()
             is ReaderUiState.Ready -> ReadyReader(
                 publication = state.publication,
+                initialLocator = state.initialLocator,
                 viewModel = viewModel,
                 onExit = onExit
             )
@@ -143,6 +146,7 @@ private fun ReaderErrorState(message: String, onBack: () -> Unit) {
 @Composable
 private fun ReadyReader(
     publication: Publication,
+    initialLocator: org.readium.r2.shared.publication.Locator?,
     viewModel: ReaderViewModel,
     onExit: () -> Unit
 ) {
@@ -207,7 +211,10 @@ private fun ReadyReader(
 
             Log.d(TAG, "Adding EpubNavigatorFragment to container $containerId")
             val navigatorFactory = EpubNavigatorFactory(publication)
-            val fragmentFactory = navigatorFactory.createFragmentFactory(initialLocator = null)
+            val fragmentFactory = navigatorFactory.createFragmentFactory(
+                initialLocator = initialLocator,
+                initialPreferences = EpubPreferences(spread = Spread.NEVER)
+            )
             fragmentManager.fragmentFactory = fragmentFactory
             fragmentManager.beginTransaction()
                 .replace(containerId, EpubNavigatorFragment::class.java, null)
@@ -268,6 +275,14 @@ private fun ReadyReader(
                     fragmentManager.beginTransaction().remove(it).commitAllowingStateLoss()
                 }
             }
+        }
+    }
+
+    // Observe navigator position and persist reading progress on every page change.
+    LaunchedEffect(navigatorFragment) {
+        val fragment = navigatorFragment ?: return@LaunchedEffect
+        fragment.currentLocator.collect { locator ->
+            viewModel.updateProgress(locator)
         }
     }
 
