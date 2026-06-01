@@ -3,6 +3,8 @@ package com.marginalia.android.di
 import android.content.Context
 import com.marginalia.android.platform.vault.AndroidVaultFileSystem
 import com.marginalia.android.platform.vault.BookFileRepository
+import com.marginalia.vault.HighlightFileRepository
+import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
 import com.marginalia.vault.VaultFileSystem
 import dagger.Module
@@ -33,4 +35,12 @@ object VaultModule {
     @Singleton
     fun provideLibraryRepository(fileSystem: VaultFileSystem): LibraryRepository =
         BookFileRepository(fileSystem)
+
+    @Provides
+    @Singleton
+    fun provideHighlightRepository(
+        fileSystem: VaultFileSystem,
+        libraryRepository: LibraryRepository
+    ): HighlightRepository =
+        HighlightFileRepository(fileSystem, libraryRepository)
 }
