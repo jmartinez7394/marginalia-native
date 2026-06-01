@@ -6,7 +6,9 @@ import kotlinx.serialization.Serializable
 data class Highlight(
     val id: String,
     val bookId: String,
+    val href: String = "",
     val cfi: String,
+    val locatorJson: String = "",
     val text: String,
     val colour: HighlightColour,
     val annotation: String?,

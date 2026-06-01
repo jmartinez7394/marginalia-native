@@ -58,7 +58,8 @@ import org.readium.r2.shared.publication.Publication
 
 private const val TAG = "ReaderScreen"
 private const val HIGHLIGHT_GROUP = "highlights"
-private const val SELECTION_POLL_MS = 250L
+private const val SELECTION_POLL_MS = 300L
+private const val SELECTION_STABLE_MS = 1200L
 
 @Composable
 fun ReaderScreen(
@@ -143,6 +144,8 @@ private fun ReadyReader(
 
     var showColourPicker by remember { mutableStateOf(false) }
     var pendingSelectionCfi by remember { mutableStateOf("") }
+    var pendingSelectionHref by remember { mutableStateOf("") }
+    var pendingSelectionLocatorJson by remember { mutableStateOf("") }
     var pendingSelectionText by remember { mutableStateOf("") }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
@@ -232,26 +235,67 @@ private fun ReadyReader(
     LaunchedEffect(navigatorFragment, highlights) {
         val fragment = navigatorFragment ?: return@LaunchedEffect
         val decorable = fragment as? DecorableNavigator ?: return@LaunchedEffect
+        val supportsHighlight = decorable.supportsDecorationStyle(Decoration.Style.Highlight::class)
+        val supportsUnderline = decorable.supportsDecorationStyle(Decoration.Style.Underline::class)
+        Log.d(TAG, "decoration support: Highlight=$supportsHighlight Underline=$supportsUnderline")
         val decorations = highlights.mapNotNull { it.toDecoration() }
+        Log.d(TAG, "applyDecorations: ${highlights.size} highlights → ${decorations.size} decorations")
         decorable.applyDecorations(decorations, HIGHLIGHT_GROUP)
     }
 
     // Poll for text selection. SelectableNavigator has no callback API; polling is
-    // the only option. The WebView long-press now reaches the WebView because there
-    // is no Compose gesture overlay consuming touch events.
+    // the only option. We wait for the selection to be STABLE (same text for
+    // SELECTION_STABLE_MS) before showing the picker — this gives the user time to
+    // drag the selection handles to extend the selection before we consume it.
     LaunchedEffect(navigatorFragment) {
         val fragment = navigatorFragment ?: return@LaunchedEffect
         val selectable = fragment as? SelectableNavigator ?: return@LaunchedEffect
+        var stableText = ""
+        var stableCfi = ""
+        var stableHref = ""
+        var stableLocatorJson = ""
+        var stableStart = 0L
         while (true) {
             delay(SELECTION_POLL_MS)
-            val selection = selectable.currentSelection() ?: continue
-            val text = selection.locator.text.highlight ?: continue
-            if (text.isBlank()) continue
+            val selection = selectable.currentSelection()
+            if (selection == null) {
+                stableText = ""
+                stableStart = 0L
+                continue
+            }
+            val text = selection.locator.text.highlight
+            if (text.isNullOrBlank()) {
+                stableText = ""
+                stableStart = 0L
+                continue
+            }
             val cfi = selection.locator.locations.fragments.firstOrNull() ?: ""
-            pendingSelectionCfi = cfi
-            pendingSelectionText = text
-            showColourPicker = true
-            selectable.clearSelection()
+            val href = selection.locator.href.toString()
+            val locatorJson = try { selection.locator.toJSON().toString() } catch (e: Exception) { "" }
+            val now = System.currentTimeMillis()
+            if (text != stableText) {
+                Log.d(TAG, "Selection detected: text='$text' href='$href' cfi='$cfi'")
+                stableText = text
+                stableCfi = cfi
+                stableHref = href
+                stableLocatorJson = locatorJson
+                stableStart = now
+            } else {
+                // Update CFI and locator in case Readium's JS bridge fills them asynchronously
+                if (cfi.isNotEmpty()) stableCfi = cfi
+                if (href.isNotEmpty()) stableHref = href
+                if (locatorJson.isNotEmpty()) stableLocatorJson = locatorJson
+                if (now - stableStart >= SELECTION_STABLE_MS) {
+                    pendingSelectionCfi = stableCfi
+                    pendingSelectionHref = stableHref
+                    pendingSelectionLocatorJson = stableLocatorJson
+                    pendingSelectionText = stableText
+                    showColourPicker = true
+                    selectable.clearSelection()
+                    stableText = ""
+                    stableStart = 0L
+                }
+            }
         }
     }
 
@@ -262,7 +306,7 @@ private fun ReadyReader(
         ) {
             HighlightColourPicker(
                 onColourSelected = { colour ->
-                    viewModel.createHighlight(pendingSelectionCfi, pendingSelectionText, colour)
+                    viewModel.createHighlight(pendingSelectionCfi, pendingSelectionHref, pendingSelectionLocatorJson, pendingSelectionText, colour)
                     coroutineScope.launch {
                         bottomSheetState.hide()
                         showColourPicker = false
@@ -333,23 +377,42 @@ private fun HighlightColourPicker(
 }
 
 private fun Highlight.toDecoration(): Decoration? {
+    // Greyscale tints for e-ink: YELLOW=lightest (background highlight), PINK=darkest.
+    // Alpha ~100/255 gives visible-but-not-oppressive overlay on e-ink white background.
     val tint = when (colour) {
-        HighlightColour.YELLOW -> Color.argb(255, 220, 220, 220)
-        HighlightColour.GREEN -> Color.argb(255, 180, 180, 180)
-        HighlightColour.BLUE -> Color.argb(255, 140, 140, 140)
-        HighlightColour.PINK -> Color.argb(255, 160, 160, 160)
+        HighlightColour.YELLOW -> Color.argb(100, 200, 200, 200)
+        HighlightColour.GREEN -> Color.argb(120, 160, 160, 160)
+        HighlightColour.BLUE -> Color.argb(140, 120, 120, 120)
+        HighlightColour.PINK -> Color.argb(160, 80, 80, 80)
     }
-    val locator = try {
-        org.readium.r2.shared.publication.Locator.fromJSON(org.json.JSONObject("{\"href\":\"\",\"type\":\"application/xhtml+xml\",\"locations\":{\"fragments\":[\"$cfi\"]},\"text\":{\"highlight\":${
-            org.json.JSONObject.quote(text)
-        }}}"))
-    } catch (e: Exception) {
-        null
+    // Prefer the complete stored locator (preserves CFI, text context, progression).
+    // Fall back to rebuilding from href+cfi for highlights created before locatorJson was added.
+    val locator = when {
+        locatorJson.isNotEmpty() -> try {
+            org.readium.r2.shared.publication.Locator.fromJSON(org.json.JSONObject(locatorJson))
+        } catch (e: Exception) {
+            android.util.Log.e("ReaderScreen", "toDecoration: locatorJson parse failed", e)
+            null
+        }
+        href.isNotEmpty() -> try {
+            org.readium.r2.shared.publication.Locator.fromJSON(org.json.JSONObject("{\"href\":${
+                org.json.JSONObject.quote(href)
+            },\"type\":\"application/xhtml+xml\",\"locations\":{\"fragments\":[\"$cfi\"]},\"text\":{\"highlight\":${
+                org.json.JSONObject.quote(text)
+            }}}"))
+        } catch (e: Exception) {
+            null
+        }
+        else -> null
     }
-    locator ?: return null
+    if (locator == null) {
+        android.util.Log.w("ReaderScreen", "toDecoration: null locator for href=$href cfi=$cfi")
+        return null
+    }
+    android.util.Log.d("ReaderScreen", "toDecoration: href=${locator.href} cfi=${locator.locations.fragments.firstOrNull()} text='${text.take(20)}'")
     return Decoration(
         id = id,
         locator = locator,
-        style = Decoration.Style.Underline(tint = tint)
+        style = Decoration.Style.Highlight(tint = tint)
     )
 }

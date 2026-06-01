@@ -88,13 +88,15 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    fun createHighlight(cfi: String, text: String, colour: HighlightColour) {
+    fun createHighlight(cfi: String, href: String, locatorJson: String, text: String, colour: HighlightColour) {
         val bookId = currentBookId ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val highlight = Highlight(
                 id = UUID.randomUUID().toString(),
                 bookId = bookId,
+                href = href,
                 cfi = cfi,
+                locatorJson = locatorJson,
                 text = text,
                 colour = colour,
                 annotation = null,
