@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -35,7 +36,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.marginalia.android.BuildConfig
 import com.marginalia.android.R
+import com.marginalia.android.ui.reader.RefreshDebugOverlay
 import com.marginalia.model.Book
 import com.marginalia.model.ReadingStatus
 
@@ -54,23 +57,42 @@ fun LibraryScreen(
     val pickEpub = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
+        viewModel.onFilePickerClose()
         uri?.let { viewModel.importBook(it) }
     }
 
     val uiState by viewModel.uiState.collectAsState()
 
-    when (val state = uiState) {
-        is LibraryUiState.Loading -> LibraryLoadingState()
-        is LibraryUiState.Empty -> LibraryEmptyState(
-            onAddBook = { pickEpub.launch(EPUB_MIME_TYPES) }
-        )
-        is LibraryUiState.Books -> LibraryBookGrid(
-            books = state.list,
-            onBookClick = onBookClick,
-            onAddBook = { pickEpub.launch(EPUB_MIME_TYPES) }
-        )
-        is LibraryUiState.Error -> LibraryErrorState(state.message) {
-            viewModel.loadBooks(territoryId)
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (val state = uiState) {
+            is LibraryUiState.Loading -> LibraryLoadingState()
+            is LibraryUiState.Empty -> LibraryEmptyState(
+                onAddBook = {
+                    viewModel.onAddBookTap()
+                    pickEpub.launch(EPUB_MIME_TYPES)
+                }
+            )
+            is LibraryUiState.Books -> LibraryBookGrid(
+                books = state.list,
+                onBookClick = { bookId -> onBookClick(bookId) },
+                onAddBook = {
+                    viewModel.onAddBookTap()
+                    pickEpub.launch(EPUB_MIME_TYPES)
+                },
+                onScrollStart = { viewModel.onScrollActive() },
+                onScrollEnd = { viewModel.scheduleScrollSettle() }
+            )
+            is LibraryUiState.Error -> LibraryErrorState(state.message) {
+                viewModel.loadBooks(territoryId)
+            }
+        }
+
+        if (BuildConfig.DEBUG) {
+            val debugMode by viewModel.debugRefreshMode.collectAsState()
+            RefreshDebugOverlay(
+                lastMode = debugMode,
+                modifier = Modifier.align(Alignment.TopEnd)
+            )
         }
     }
 }
@@ -144,8 +166,17 @@ private fun LibraryErrorState(message: String, onRetry: () -> Unit) {
 private fun LibraryBookGrid(
     books: List<Book>,
     onBookClick: (String) -> Unit,
-    onAddBook: () -> Unit
+    onAddBook: () -> Unit,
+    onScrollStart: () -> Unit = {},
+    onScrollEnd: () -> Unit = {}
 ) {
+    val lazyGridState = rememberLazyGridState()
+
+    // A2 while scrolling, REGAL on scroll settle.
+    LaunchedEffect(lazyGridState.isScrollInProgress) {
+        if (lazyGridState.isScrollInProgress) onScrollStart() else onScrollEnd()
+    }
+
     Column(modifier = Modifier
         .fillMaxSize()
         .statusBarsPadding()
@@ -159,6 +190,7 @@ private fun LibraryBookGrid(
             Text(stringResource(R.string.library_add_book))
         }
         LazyVerticalGrid(
+            state = lazyGridState,
             columns = GridCells.Fixed(2),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

@@ -5,16 +5,22 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.marginalia.android.di.AppSettings
 import com.marginalia.android.di.VaultRootPath
+import com.marginalia.device.DisplayRefreshManager
+import com.marginalia.device.RefreshMode
 import com.marginalia.model.Book
 import com.marginalia.model.BookFormat
 import com.marginalia.model.ReadingProgress
 import com.marginalia.model.ReadingStatus
 import com.marginalia.model.Result
+import com.marginalia.settings.SettingsRegistry
 import com.marginalia.vault.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,13 +42,19 @@ sealed class LibraryUiState {
 class LibraryViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     @ApplicationContext private val context: Context,
-    @VaultRootPath private val vaultRootPath: String
+    @VaultRootPath private val vaultRootPath: String,
+    private val displayRefreshManager: DisplayRefreshManager,
+    private val settingsRegistry: SettingsRegistry
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<LibraryUiState>(LibraryUiState.Loading)
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
+    private val _debugRefreshMode = MutableStateFlow<RefreshMode?>(null)
+    val debugRefreshMode: StateFlow<RefreshMode?> = _debugRefreshMode.asStateFlow()
+
     private var currentTerritoryId = "library"
+    private var scrollSettleJob: Job? = null
 
     fun loadBooks(territoryId: String) {
         currentTerritoryId = territoryId
@@ -107,6 +119,41 @@ class LibraryViewModel @Inject constructor(
                 Log.e(TAG, "importBook: exception — ${e.message}", e)
             }
         }
+    }
+
+    // --- Refresh events ---
+
+    fun onScrollActive() {
+        scrollSettleJob?.cancel()
+        displayRefreshManager.refreshFast()
+        _debugRefreshMode.value = RefreshMode.A2
+    }
+
+    fun scheduleScrollSettle() {
+        scrollSettleJob?.cancel()
+        val thresholdMs = settingsRegistry.get(AppSettings.REFRESH_SCROLL_PAUSE_MS).toLong()
+        scrollSettleJob = viewModelScope.launch {
+            delay(thresholdMs)
+            displayRefreshManager.refreshRegalFull()
+            _debugRefreshMode.value = RefreshMode.REGAL
+        }
+    }
+
+    fun onAddBookTap() {
+        displayRefreshManager.refreshDU()
+        _debugRefreshMode.value = RefreshMode.DU
+    }
+
+    fun onFilePickerClose() {
+        displayRefreshManager.refreshRegalFull()
+        _debugRefreshMode.value = RefreshMode.REGAL
+    }
+
+    // --- End refresh events ---
+
+    override fun onCleared() {
+        super.onCleared()
+        scrollSettleJob?.cancel()
     }
 
     private fun extractEpubMetadata(epubFile: File): Pair<String, String> {
