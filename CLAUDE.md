@@ -287,3 +287,36 @@ Do not call `/advisor` for:
 - Lint violations with clear fix paths
 - Test failures where the cause is immediately clear
 - Permission errors (check settings.json first)
+
+---
+
+## Emulator Self-Testing Protocol
+
+For every session with a Yellow gate, before reporting to the project
+owner for manual verification:
+
+1. Build and install on the emulator:
+   ```
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+   $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+   .\gradlew installDebug
+   adb shell am force-stop com.marginalia.android.debug
+   ```
+
+2. Launch the app and exercise every item in the session checklist
+
+3. Monitor logcat for errors and crashes:
+   ```
+   adb logcat -d 2>/dev/null | grep "$(adb shell pidof com.marginalia.android.debug)" | grep -iE "error|crash|exception|fatal" | grep -v "MESA\|tile_manager\|rendernode\|101010-2\|Seed missing"
+   ```
+   The grep exclusions strip known emulator-only GPU noise that does not
+   appear on real hardware and does not indicate real errors.
+
+4. Fix any issues found before reporting to project owner
+
+5. Only report PENDING to project owner after self-testing passes
+   with no crashes and no logcat errors
+
+The project owner's manual testing is the final confirmation gate,
+not the first line of debugging. Claude Code resolves all technical
+issues before escalating to manual testing.
