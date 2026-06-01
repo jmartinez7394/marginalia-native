@@ -15,6 +15,7 @@ import com.marginalia.model.ReadingProgress
 import com.marginalia.model.ReadingStatus
 import com.marginalia.model.Result
 import com.marginalia.settings.SettingsRegistry
+import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
 import com.marginalia.vault.RegistrySignalService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -46,7 +47,8 @@ class LibraryViewModel @Inject constructor(
     @VaultRootPath private val vaultRootPath: String,
     private val displayRefreshManager: DisplayRefreshManager,
     private val settingsRegistry: SettingsRegistry,
-    private val registrySignalService: RegistrySignalService
+    private val registrySignalService: RegistrySignalService,
+    private val highlightRepository: HighlightRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<LibraryUiState>(LibraryUiState.Loading)
@@ -57,6 +59,9 @@ class LibraryViewModel @Inject constructor(
 
     private val _pendingCandidateCount = MutableStateFlow(0)
     val pendingCandidateCount: StateFlow<Int> = _pendingCandidateCount.asStateFlow()
+
+    private val _highlightCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val highlightCounts: StateFlow<Map<String, Int>> = _highlightCounts.asStateFlow()
 
     private var currentTerritoryId = "library"
     private var scrollSettleJob: Job? = null
@@ -70,11 +75,21 @@ class LibraryViewModel @Inject constructor(
                 Log.d(TAG, "loadBooks($territoryId): ${books.size} books returned")
                 _uiState.value = if (books.isEmpty()) LibraryUiState.Empty
                 else LibraryUiState.Books(books)
+                checkPendingCandidates(territoryId)
+                loadHighlightCounts(books.map { it.id })
             } catch (e: Exception) {
                 Log.e(TAG, "loadBooks($territoryId): exception — ${e.message}", e)
                 _uiState.value = LibraryUiState.Error(e.message ?: "Unknown error")
             }
-            checkPendingCandidates(territoryId)
+        }
+    }
+
+    private fun loadHighlightCounts(bookIds: List<String>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val counts = bookIds.associateWith { bookId ->
+                highlightRepository.getHighlights(bookId).size
+            }.filter { it.value > 0 }
+            _highlightCounts.value = counts
         }
     }
 

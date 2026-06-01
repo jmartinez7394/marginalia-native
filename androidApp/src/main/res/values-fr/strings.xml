@@ -26,6 +26,15 @@
     <string name="highlight_add_annotation">TODO: Ajouter une annotation</string>
     <string name="highlight_delete">TODO: Supprimer le surlignage</string>
 
+    <!-- Highlights panel and reader chrome -->
+    <string name="reader_chrome_highlights">TODO: Surlignages</string>
+    <string name="reader_chrome_notes">TODO: Notes</string>
+    <string name="highlights_panel_empty">TODO: Aucun surlignage pour l\'instant</string>
+    <string name="highlights_filter_annotation_only">TODO: Annoté</string>
+    <string name="linked_note_title">TODO: Notes de lecture</string>
+    <string name="linked_note_open_full">TODO: Ouvrir la note complète</string>
+    <string name="library_highlights_count">TODO: %d surlignages</string>
+
     <!-- Concept registry -->
     <string name="library_concept_candidates">TODO: %d candidat(s) de concept prêts pour révision</string>
     <string name="registry_title">TODO: Registre des concepts</string>

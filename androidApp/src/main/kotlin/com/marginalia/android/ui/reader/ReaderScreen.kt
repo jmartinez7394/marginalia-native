@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -25,12 +28,15 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -52,6 +58,8 @@ import com.marginalia.model.ConceptNote
 import com.marginalia.model.EmotionalTag
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.DecorableNavigator
@@ -201,6 +209,9 @@ private fun ReadyReader(
         if (selectedHighlight != null) viewModel.onAnnotationOpen()
     }
 
+    // Chrome state ref declared early so the InputListener closure inside DisposableEffect can capture it
+    val showChromeRef = remember { mutableStateOf(false) }
+
     // Full-screen FragmentContainerView. Background matches reading theme to prevent
     // white flash on WebView initialise and reflow.
     AndroidView(
@@ -263,7 +274,11 @@ private fun ReadyReader(
                                 viewModel.onPageTurn()
                                 true
                             }
-                            else -> false
+                            else -> {
+                                // Centre zone — toggle reader chrome (DU refresh)
+                                showChromeRef.value = !showChromeRef.value
+                                true
+                            }
                         }
                     }
                     override fun onDrag(event: DragEvent): Boolean {
@@ -394,6 +409,44 @@ private fun ReadyReader(
         }
     }
 
+    // Reader chrome panels
+    var showHighlightsPanel by remember { mutableStateOf(false) }
+    var showLinkedNotePanel by remember { mutableStateOf(false) }
+
+    if (showChromeRef.value) {
+        ReaderChromeOverlay(
+            onHighlightsClick = { showHighlightsPanel = true; showChromeRef.value = false },
+            onNotesClick = { showLinkedNotePanel = true; showChromeRef.value = false },
+            onDismiss = { showChromeRef.value = false }
+        )
+    }
+
+    if (showHighlightsPanel) {
+        HighlightsPanel(
+            highlights = highlights,
+            onHighlightClick = { h ->
+                navigatorFragment?.let { frag ->
+                    val locator = h.locatorJson.takeIf { it.isNotEmpty() }?.let {
+                        try { org.readium.r2.shared.publication.Locator.fromJSON(org.json.JSONObject(it)) }
+                        catch (e: Exception) { null }
+                    }
+                    if (locator != null) {
+                        coroutineScope.launch { frag.go(locator, animated = false) }
+                    }
+                }
+                showHighlightsPanel = false
+            },
+            onDismiss = { showHighlightsPanel = false }
+        )
+    }
+
+    if (showLinkedNotePanel) {
+        LinkedNotePanel(
+            viewModel = viewModel,
+            onDismiss = { showLinkedNotePanel = false }
+        )
+    }
+
     // New highlight creation — colour picker sheet
     if (showColourPicker) {
         ModalBottomSheet(
@@ -469,6 +522,218 @@ private fun ReadyReader(
             },
             onDismiss = { showConceptLinkSheet = false }
         )
+    }
+}
+
+@Composable
+private fun ReaderChromeOverlay(
+    onHighlightsClick: () -> Unit,
+    onNotesClick: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = onDismiss)
+    ) {
+        // Bottom chrome strip
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f))
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            OutlinedButton(
+                onClick = onHighlightsClick,
+                modifier = Modifier.weight(1f)
+            ) { Text(stringResource(R.string.reader_chrome_highlights)) }
+            OutlinedButton(
+                onClick = onNotesClick,
+                modifier = Modifier.weight(1f)
+            ) { Text(stringResource(R.string.reader_chrome_notes)) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HighlightsPanel(
+    highlights: List<Highlight>,
+    onHighlightClick: (Highlight) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var filterColour by remember { mutableStateOf<HighlightColour?>(null) }
+    var filterEmotion by remember { mutableStateOf<EmotionalTag?>(null) }
+    var annotationOnly by remember { mutableStateOf(false) }
+
+    val filtered = highlights
+        .filter { filterColour == null || it.colour == filterColour }
+        .filter { filterEmotion == null || it.emotionalTag == filterEmotion }
+        .filter { !annotationOnly || !it.annotation.isNullOrEmpty() }
+        .sortedBy { it.createdAt }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.reader_chrome_highlights),
+                style = MaterialTheme.typography.titleSmall
+            )
+            // Colour filter row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // "All" chip
+                if (filterColour == null) {
+                    Button(onClick = { filterColour = null }, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.registry_filter_all), style = MaterialTheme.typography.labelSmall)
+                    }
+                } else {
+                    OutlinedButton(onClick = { filterColour = null }, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.registry_filter_all), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                HighlightColour.values().forEach { colour ->
+                    ColourButton(
+                        colour = colour,
+                        selected = filterColour == colour,
+                        label = colourLabel(colour),
+                        onSelect = { filterColour = if (filterColour == colour) null else colour },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            // Annotation-only toggle
+            OutlinedButton(
+                onClick = { annotationOnly = !annotationOnly },
+                modifier = Modifier.fillMaxWidth(),
+                border = if (annotationOnly) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+            ) {
+                Text(stringResource(R.string.highlights_filter_annotation_only), style = MaterialTheme.typography.labelSmall)
+            }
+            // Highlights list
+            if (filtered.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.highlights_panel_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(filtered, key = { it.id }) { h ->
+                        HighlightPanelItem(h, onHighlightClick)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun colourLabel(colour: HighlightColour) = when (colour) {
+    HighlightColour.YELLOW -> stringResource(R.string.highlight_colour_yellow)
+    HighlightColour.GREEN -> stringResource(R.string.highlight_colour_green)
+    HighlightColour.BLUE -> stringResource(R.string.highlight_colour_blue)
+    HighlightColour.PINK -> stringResource(R.string.highlight_colour_pink)
+}
+
+@Composable
+private fun HighlightPanelItem(highlight: Highlight, onClick: (Highlight) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick(highlight) }
+            .padding(vertical = 8.dp)
+    ) {
+        Text(
+            text = "\"${highlight.text.take(100)}${if (highlight.text.length > 100) "…" else ""}\"",
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 2.dp)
+        ) {
+            Text(
+                text = highlight.colour.name.lowercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            highlight.emotionalTag?.let { tag ->
+                Text(
+                    text = tag.name.lowercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        highlight.annotation?.takeIf { it.isNotEmpty() }?.let { ann ->
+            Text(
+                text = ann.take(80),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontStyle = FontStyle.Italic,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        Divider(modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LinkedNotePanel(
+    viewModel: ReaderViewModel,
+    onDismiss: () -> Unit
+) {
+    val content by produceState<String?>(null) {
+        value = withContext(Dispatchers.IO) { viewModel.getLinkedNoteContent() }
+    }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.linked_note_title),
+                style = MaterialTheme.typography.titleSmall
+            )
+            when (content) {
+                null -> CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.Black)
+                "" -> Text(
+                    text = stringResource(R.string.highlights_panel_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                else -> Text(
+                    text = content!!.take(2000),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
     }
 }
 

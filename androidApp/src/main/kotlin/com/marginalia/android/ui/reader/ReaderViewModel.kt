@@ -21,9 +21,11 @@ import com.marginalia.settings.SettingsRegistry
 import com.marginalia.vault.ConceptRegistry
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
+import com.marginalia.vault.LinkedNoteGenerator
 import com.marginalia.vault.LinkedNoteService
 import com.marginalia.vault.RegistrySignalService
 import com.marginalia.vault.SignalDetector
+import com.marginalia.vault.VaultFileSystem
 import com.marginalia.model.SignalSourceType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +58,7 @@ class ReaderViewModel @Inject constructor(
     private val linkedNoteService: LinkedNoteService,
     private val registrySignalService: RegistrySignalService,
     private val conceptRegistry: ConceptRegistry,
+    private val fileSystem: VaultFileSystem,
     private val displayRefreshManager: DisplayRefreshManager,
     private val settingsRegistry: SettingsRegistry
 ) : ViewModel() {
@@ -309,6 +312,14 @@ class ReaderViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    // Read linked note file content for the quick-view panel
+    suspend fun getLinkedNoteContent(): String? {
+        val book = currentBook ?: return null
+        val title = LinkedNoteGenerator.sanitiseFilename(book.title)
+        val author = LinkedNoteGenerator.sanitiseFilename(book.author)
+        return fileSystem.readFile("${book.territoryId}/notes/$title - $author.md")
     }
 
     private suspend fun recordSignals(highlight: Highlight) {

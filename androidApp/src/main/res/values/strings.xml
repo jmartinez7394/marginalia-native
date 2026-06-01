@@ -26,6 +26,15 @@
     <string name="highlight_add_annotation">Add annotation</string>
     <string name="highlight_delete">Delete highlight</string>
 
+    <!-- Highlights panel and reader chrome -->
+    <string name="reader_chrome_highlights">Highlights</string>
+    <string name="reader_chrome_notes">Notes</string>
+    <string name="highlights_panel_empty">No highlights yet</string>
+    <string name="highlights_filter_annotation_only">Annotated</string>
+    <string name="linked_note_title">Reading Notes</string>
+    <string name="linked_note_open_full">Open full note</string>
+    <string name="library_highlights_count">%d highlights</string>
+
     <!-- Concept registry -->
     <string name="library_concept_candidates">%d concept candidate(s) ready for review</string>
     <string name="registry_title">Concept Registry</string>

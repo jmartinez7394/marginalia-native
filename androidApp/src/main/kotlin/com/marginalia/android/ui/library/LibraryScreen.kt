@@ -64,6 +64,7 @@ fun LibraryScreen(
 
     val uiState by viewModel.uiState.collectAsState()
     val pendingCandidateCount by viewModel.pendingCandidateCount.collectAsState()
+    val highlightCounts by viewModel.highlightCounts.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         when (val state = uiState) {
@@ -77,6 +78,7 @@ fun LibraryScreen(
             is LibraryUiState.Books -> LibraryBookGrid(
                 books = state.list,
                 pendingCandidateCount = pendingCandidateCount,
+                highlightCounts = highlightCounts,
                 onBookClick = { bookId -> onBookClick(bookId) },
                 onAddBook = {
                     viewModel.onAddBookTap()
@@ -170,6 +172,7 @@ private fun LibraryErrorState(message: String, onRetry: () -> Unit) {
 private fun LibraryBookGrid(
     books: List<Book>,
     pendingCandidateCount: Int = 0,
+    highlightCounts: Map<String, Int> = emptyMap(),
     onBookClick: (String) -> Unit,
     onAddBook: () -> Unit,
     onConceptReviewClick: () -> Unit = {},
@@ -213,14 +216,18 @@ private fun LibraryBookGrid(
             modifier = Modifier.fillMaxSize()
         ) {
             items(books, key = { it.id }) { book ->
-                BookCard(book = book, onClick = { onBookClick(book.id) })
+                BookCard(
+                    book = book,
+                    highlightCount = highlightCounts[book.id] ?: 0,
+                    onClick = { onBookClick(book.id) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun BookCard(book: Book, onClick: () -> Unit) {
+private fun BookCard(book: Book, highlightCount: Int = 0, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -274,6 +281,14 @@ private fun BookCard(book: Book, onClick: () -> Unit) {
                     .height(2.dp),
                 color = Color.Black,
                 trackColor = Color(0xFFE0E0E0)
+            )
+        }
+        if (highlightCount > 0) {
+            Text(
+                text = stringResource(R.string.library_highlights_count, highlightCount),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
             )
         }
     }
