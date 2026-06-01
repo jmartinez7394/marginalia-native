@@ -26,6 +26,13 @@
     <string name="highlight_add_annotation">TODO: Ajouter une annotation</string>
     <string name="highlight_delete">TODO: Supprimer le surlignage</string>
 
+    <!-- Emotional resonance tags -->
+    <string name="emotion_moved">TODO: ◉ Touché</string>
+    <string name="emotion_troubled">TODO: △ Troublé</string>
+    <string name="emotion_surprised">TODO: ◈ Surpris</string>
+    <string name="emotion_delighted">TODO: ○ Ravi</string>
+    <string name="emotion_resistant">TODO: ✕ Résistant</string>
+
     <!-- Annotation bottom sheet -->
     <string name="highlight_annotation_hint">TODO: Ajouter une note à ce passage…</string>
     <string name="highlight_annotation_save">TODO: Enregistrer</string>

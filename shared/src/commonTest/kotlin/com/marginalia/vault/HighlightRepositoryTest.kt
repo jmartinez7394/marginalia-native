@@ -1,5 +1,6 @@
 package com.marginalia.vault
 
+import com.marginalia.model.EmotionalTag
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
 import com.marginalia.model.Result
@@ -141,6 +142,24 @@ class HighlightRepositoryTest {
 
         val loaded = repo.getHighlights("book1")
         assertEquals("second note", loaded.first().annotation)
+    }
+
+    @Test
+    fun `highlight with emotional tag serialises and deserialises`() = runTest {
+        val repo = makeRepo()
+        val highlight = makeHighlight().copy(emotionalTag = EmotionalTag.MOVED)
+        repo.addHighlight(highlight)
+        val loaded = repo.getHighlights("book1")
+        assertEquals(EmotionalTag.MOVED, loaded.first().emotionalTag)
+    }
+
+    @Test
+    fun `null emotional tag serialises as null`() = runTest {
+        val repo = makeRepo()
+        val highlight = makeHighlight(annotation = null)
+        repo.addHighlight(highlight)
+        val loaded = repo.getHighlights("book1")
+        assertEquals(null, loaded.first().emotionalTag)
     }
 
     @Test

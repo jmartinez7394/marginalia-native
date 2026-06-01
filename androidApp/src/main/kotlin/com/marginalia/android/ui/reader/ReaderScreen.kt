@@ -46,6 +46,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.marginalia.android.BuildConfig
 import com.marginalia.android.R
+import com.marginalia.model.EmotionalTag
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
 import kotlinx.coroutines.delay
@@ -424,11 +425,12 @@ private fun ReadyReader(
     if (selectedHighlight != null) {
         AnnotationBottomSheet(
             highlight = selectedHighlight,
-            onSave = { annotation, colour ->
+            onSave = { annotation, colour, tag ->
                 viewModel.updateHighlight(
                     selectedHighlight.copy(
                         annotation = annotation.trim().ifEmpty { null },
-                        colour = colour
+                        colour = colour,
+                        emotionalTag = tag
                     )
                 )
                 selectedHighlightId = null
@@ -446,12 +448,13 @@ private fun ReadyReader(
 @Composable
 private fun AnnotationBottomSheet(
     highlight: Highlight,
-    onSave: (annotation: String, colour: HighlightColour) -> Unit,
+    onSave: (annotation: String, colour: HighlightColour, emotionalTag: EmotionalTag?) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var annotationText by remember(highlight.id) { mutableStateOf(highlight.annotation ?: "") }
     var selectedColour by remember(highlight.id) { mutableStateOf(highlight.colour) }
+    var selectedTag by remember(highlight.id) { mutableStateOf(highlight.emotionalTag) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
@@ -530,14 +533,57 @@ private fun AnnotationBottomSheet(
                 )
             }
 
+            // Emotional resonance tags — one row, tapping active tag deselects it
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                EmotionTagButton(
+                    tag = EmotionalTag.MOVED,
+                    selected = selectedTag == EmotionalTag.MOVED,
+                    label = stringResource(R.string.emotion_moved),
+                    onToggle = { selectedTag = if (selectedTag == EmotionalTag.MOVED) null else EmotionalTag.MOVED },
+                    modifier = Modifier.weight(1f)
+                )
+                EmotionTagButton(
+                    tag = EmotionalTag.TROUBLED,
+                    selected = selectedTag == EmotionalTag.TROUBLED,
+                    label = stringResource(R.string.emotion_troubled),
+                    onToggle = { selectedTag = if (selectedTag == EmotionalTag.TROUBLED) null else EmotionalTag.TROUBLED },
+                    modifier = Modifier.weight(1f)
+                )
+                EmotionTagButton(
+                    tag = EmotionalTag.SURPRISED,
+                    selected = selectedTag == EmotionalTag.SURPRISED,
+                    label = stringResource(R.string.emotion_surprised),
+                    onToggle = { selectedTag = if (selectedTag == EmotionalTag.SURPRISED) null else EmotionalTag.SURPRISED },
+                    modifier = Modifier.weight(1f)
+                )
+                EmotionTagButton(
+                    tag = EmotionalTag.DELIGHTED,
+                    selected = selectedTag == EmotionalTag.DELIGHTED,
+                    label = stringResource(R.string.emotion_delighted),
+                    onToggle = { selectedTag = if (selectedTag == EmotionalTag.DELIGHTED) null else EmotionalTag.DELIGHTED },
+                    modifier = Modifier.weight(1f)
+                )
+                EmotionTagButton(
+                    tag = EmotionalTag.RESISTANT,
+                    selected = selectedTag == EmotionalTag.RESISTANT,
+                    label = stringResource(R.string.emotion_resistant),
+                    onToggle = { selectedTag = if (selectedTag == EmotionalTag.RESISTANT) null else EmotionalTag.RESISTANT },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             // Save
             Button(
                 onClick = {
                     val annotation = annotationText
                     val colour = selectedColour
+                    val tag = selectedTag
                     scope.launch {
                         sheetState.hide()
-                        onSave(annotation, colour)
+                        onSave(annotation, colour, tag)
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -575,6 +621,25 @@ private fun ColourButton(
         }
     } else {
         OutlinedButton(onClick = { onSelect(colour) }, modifier = modifier) {
+            Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun EmotionTagButton(
+    tag: EmotionalTag,
+    selected: Boolean,
+    label: String,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (selected) {
+        Button(onClick = onToggle, modifier = modifier) {
+            Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    } else {
+        OutlinedButton(onClick = onToggle, modifier = modifier) {
             Text(label, style = MaterialTheme.typography.labelSmall)
         }
     }

@@ -48,6 +48,9 @@ object LinkedNoteGenerator {
             for (highlight in highlights) {
                 sb.append("> ${highlight.text}\n")
                 sb.append("^ann-${highlight.id}\n")
+                if (highlight.emotionalTag != null) {
+                    sb.append("%%emotion:${highlight.emotionalTag.name.lowercase()}%%\n")
+                }
                 if (!highlight.annotation.isNullOrEmpty()) {
                     sb.append("\n*${highlight.annotation}*\n")
                 }

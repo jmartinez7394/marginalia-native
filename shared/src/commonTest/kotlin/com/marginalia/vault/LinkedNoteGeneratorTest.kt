@@ -6,11 +6,13 @@ import com.marginalia.animachora.TerritorySymbol
 import com.marginalia.animachora.TerritoryType
 import com.marginalia.model.Book
 import com.marginalia.model.BookFormat
+import com.marginalia.model.EmotionalTag
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
 import com.marginalia.model.ReadingProgress
 import com.marginalia.model.ReadingStatus
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -165,6 +167,31 @@ class LinkedNoteGeneratorTest {
             nearBlock.any { it.startsWith("*") && it.endsWith("*") && it.length > 2 },
             "No italic annotation line near block ID when annotation is null"
         )
+    }
+
+    @Test
+    fun `emotion tag produces metadata line immediately after block ID`() {
+        val highlight = makeHighlight("h1", "A troubling passage").copy(emotionalTag = EmotionalTag.MOVED)
+        val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
+        val lines = result.lines()
+        val blockIdIdx = lines.indexOfFirst { it == "^ann-h1" }
+        assertTrue(blockIdIdx >= 0, "Block ID must exist")
+        assertEquals("%%emotion:moved%%", lines[blockIdIdx + 1], "Emotion line must immediately follow block ID")
+    }
+
+    @Test
+    fun `no emotion tag produces no emotion metadata line`() {
+        val highlight = makeHighlight("h1", "A passage", annotation = null)
+        val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
+        assertFalse(result.contains("%%emotion:"), "No emotion line when emotionalTag is null")
+    }
+
+    @Test
+    fun `emotion tag lowercase in metadata line`() {
+        val highlight = makeHighlight("h1").copy(emotionalTag = EmotionalTag.RESISTANT)
+        val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
+        assertTrue(result.contains("%%emotion:resistant%%"), "Emotion tag must be lowercase in metadata")
+        assertFalse(result.contains("%%emotion:RESISTANT%%"), "Uppercase variant must not appear")
     }
 
     @Test

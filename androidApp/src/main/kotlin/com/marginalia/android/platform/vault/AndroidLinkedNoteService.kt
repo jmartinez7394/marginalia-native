@@ -60,8 +60,11 @@ class AndroidLinkedNoteService(
                 for (h in newHighlights) {
                     append("> ${h.text}\n")
                     append("^ann-${h.id}\n")
+                    h.emotionalTag?.let { tag ->
+                        append("%%emotion:${tag.name.lowercase()}%%\n")
+                    }
                     if (!h.annotation.isNullOrEmpty()) {
-                        append("\n${h.annotation}\n")
+                        append("\n*${h.annotation}*\n")
                     }
                     append("\n")
                 }

@@ -26,6 +26,13 @@
     <string name="highlight_add_annotation">Add annotation</string>
     <string name="highlight_delete">Delete highlight</string>
 
+    <!-- Emotional resonance tags -->
+    <string name="emotion_moved">◉ Moved</string>
+    <string name="emotion_troubled">△ Troubled</string>
+    <string name="emotion_surprised">◈ Surprised</string>
+    <string name="emotion_delighted">○ Delighted</string>
+    <string name="emotion_resistant">✕ Resistant</string>
+
     <!-- Annotation bottom sheet -->
     <string name="highlight_annotation_hint">Add a note to this passage…</string>
     <string name="highlight_annotation_save">Save</string>
