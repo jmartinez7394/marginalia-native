@@ -428,6 +428,29 @@ class ReaderViewModel @Inject constructor(
         _activeHighlightColour.value = colour
     }
 
+    fun onHoverActive() {
+        displayRefreshManager.refreshFast()
+        _debugRefreshMode.value = RefreshMode.A2
+    }
+
+    // Called when the user lifts the hovering stylus after a highlight gesture.
+    // Uses the current Readium selection if available; the caller (ReaderScreen) passes
+    // it via [createHighlightFromHover].
+    fun createHighlightFromHover(
+        cfi: String,
+        href: String,
+        locatorJson: String,
+        text: String,
+        colour: HighlightColour
+    ) {
+        if (text.isBlank()) {
+            displayRefreshManager.refreshRegalFull()
+            _debugRefreshMode.value = RefreshMode.REGAL
+            return
+        }
+        createHighlight(cfi, href, locatorJson, text, colour)
+    }
+
     fun setPenStrokeWidth(width: Int) {
         settingsRegistry.set(AppSettings.PEN_STROKE_WIDTH, width)
     }

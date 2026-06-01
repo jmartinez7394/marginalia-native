@@ -269,6 +269,7 @@ private fun ReadyReader(
     var navigatorFragment by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
 
     val highlights by viewModel.currentHighlights.collectAsState()
+    val activeHighlightColour by viewModel.activeHighlightColour.collectAsState()
 
     // Colour picker state (new highlight being created from selection)
     var showColourPicker by remember { mutableStateOf(false) }
@@ -347,6 +348,7 @@ private fun ReadyReader(
     val doubleTapTolerance = settingsValue(viewModel, AppSettings.ANNOTATION_DOUBLE_TAP_TOLERANCE_PX)
     val strokeWidth = settingsValue(viewModel, AppSettings.PEN_STROKE_WIDTH)
 
+    val coroutineScopeInner = rememberCoroutineScope()
     AndroidView(
         factory = { ctx ->
             InkOverlayView(ctx).also { overlay ->
@@ -355,6 +357,29 @@ private fun ReadyReader(
                 overlay.onStrokeBegin = { x, y, p, t -> viewModel.onAnnotationStrokeBegin(x, y, p, t) }
                 overlay.onStrokePoint = { x, y, p, t -> viewModel.onAnnotationStrokePoint(x, y, p, t) }
                 overlay.onStrokeComplete = { viewModel.onAnnotationStrokeComplete() }
+                overlay.onHoverActive = { viewModel.onHoverActive() }
+                overlay.onHighlightGesture = { _ ->
+                    // Retrieve current selection from Readium after hover lift
+                    coroutineScopeInner.launch {
+                        val fragment = navigatorFragment ?: return@launch
+                        val selectable = fragment as? SelectableNavigator ?: return@launch
+                        // Give Readium's JS a moment to register the hover selection
+                        delay(200)
+                        val selection = selectable.currentSelection()
+                        if (selection != null) {
+                            val text = selection.locator.text.highlight ?: ""
+                            val cfi = selection.locator.locations.fragments.firstOrNull() ?: ""
+                            val href = selection.locator.href.toString()
+                            val locJson = try { selection.locator.toJSON().toString() } catch (e: Exception) { "" }
+                            val colour = viewModel.activeHighlightColour.value
+                            viewModel.createHighlightFromHover(cfi, href, locJson, text, colour)
+                            selectable.clearSelection()
+                        } else {
+                            // No Readium selection: REGAL to clear hover visual feedback
+                            viewModel.onTextSelectionEnd()
+                        }
+                    }
+                }
                 overlay.setBackgroundColor(Color.TRANSPARENT)
             }
         },
@@ -362,7 +387,14 @@ private fun ReadyReader(
             overlay.annotationModeActive = annotationModeFromVm
             overlay.doubleTapThresholdMs = doubleTapThreshold
             overlay.doubleTapTolerancePx = doubleTapTolerance.toFloat()
-            overlay.strokeWidthPx = strokeWidth.toFloat() * 2f // dp-ish scaling
+            overlay.strokeWidthPx = strokeWidth.toFloat() * 2f
+            // Sync highlight colour for visual feedback
+            overlay.highlightColourArgb = when (activeHighlightColour) {
+                HighlightColour.YELLOW -> android.graphics.Color.argb(100, 200, 200, 200)
+                HighlightColour.GREEN -> android.graphics.Color.argb(120, 160, 160, 160)
+                HighlightColour.BLUE -> android.graphics.Color.argb(140, 120, 120, 120)
+                HighlightColour.PINK -> android.graphics.Color.argb(160, 80, 80, 80)
+            }
         },
         modifier = Modifier.fillMaxSize()
     )

@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
@@ -37,9 +38,19 @@ class InkOverlayView(context: Context) : View(context) {
     var onStrokeBegin: ((normX: Float, normY: Float, pressure: Float, t: Long) -> Unit)? = null
     var onStrokePoint: ((normX: Float, normY: Float, pressure: Float, t: Long) -> Unit)? = null
     var onStrokeComplete: (() -> Unit)? = null
+    // Highlight gesture: fired on hover exit with the normalised bounding box of the hover stroke
+    var onHighlightGesture: ((normBounds: RectF) -> Unit)? = null
+    // Called during hover for A2 refresh
+    var onHoverActive: (() -> Unit)? = null
+    // Highlight colour for visual feedback (set from ViewModel)
+    var highlightColourArgb: Int = Color.argb(100, 200, 200, 200)
 
     private val completedPaths = mutableListOf<Path>()
     private var activePath: Path? = null
+
+    // Hover path for highlight gesture visual feedback
+    private var hoverPath: Path? = null
+    private val hoverPoints = mutableListOf<Pair<Float, Float>>()
 
     private val inkPaint = Paint().apply {
         color = Color.BLACK
@@ -50,6 +61,14 @@ class InkOverlayView(context: Context) : View(context) {
         strokeWidth = 4f
     }
 
+    private val hoverPaint = Paint().apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        isAntiAlias = true
+        strokeWidth = 12f
+    }
+
     private var lastDownTime = 0L
     private var lastDownX = 0f
     private var lastDownY = 0f
@@ -57,6 +76,11 @@ class InkOverlayView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        // Draw hover highlight stroke (visible even when annotation mode inactive)
+        hoverPath?.let { path ->
+            hoverPaint.color = highlightColourArgb
+            canvas.drawPath(path, hoverPaint)
+        }
         if (!annotationModeActive) return
         inkPaint.strokeWidth = strokeWidthPx
         for (path in completedPaths) canvas.drawPath(path, inkPaint)
@@ -137,6 +161,50 @@ class InkOverlayView(context: Context) : View(context) {
         onStrokeComplete?.invoke()
         invalidate()
         return true
+    }
+
+    override fun onHoverEvent(event: MotionEvent): Boolean {
+        // Only handle hover when annotation mode is INACTIVE (hover = highlight gesture)
+        if (annotationModeActive) return false
+        return when (event.actionMasked) {
+            MotionEvent.ACTION_HOVER_MOVE -> {
+                if (hoverPath == null) {
+                    val path = Path()
+                    path.moveTo(event.x, event.y)
+                    hoverPath = path
+                } else {
+                    hoverPath?.lineTo(event.x, event.y)
+                }
+                hoverPoints.add(Pair(event.x, event.y))
+                onHoverActive?.invoke()
+                invalidate()
+                true
+            }
+            MotionEvent.ACTION_HOVER_EXIT -> {
+                if (hoverPoints.isNotEmpty()) {
+                    val bounds = computeNormBounds()
+                    onHighlightGesture?.invoke(bounds)
+                }
+                hoverPath = null
+                hoverPoints.clear()
+                invalidate()
+                true
+            }
+            MotionEvent.ACTION_HOVER_ENTER -> true
+            else -> false
+        }
+    }
+
+    private fun computeNormBounds(): RectF {
+        val vw = if (width > 0) width.toFloat() else 1f
+        val vh = if (height > 0) height.toFloat() else 1f
+        var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
+        var maxX = Float.MIN_VALUE; var maxY = Float.MIN_VALUE
+        for ((x, y) in hoverPoints) {
+            if (x < minX) minX = x; if (y < minY) minY = y
+            if (x > maxX) maxX = x; if (y > maxY) maxY = y
+        }
+        return RectF(minX / vw, minY / vh, maxX / vw, maxY / vh)
     }
 
     fun clearStrokes() {
