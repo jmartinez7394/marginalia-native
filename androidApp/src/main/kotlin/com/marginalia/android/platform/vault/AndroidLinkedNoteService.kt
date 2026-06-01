@@ -5,6 +5,7 @@ import com.marginalia.animachora.Territory
 import com.marginalia.model.Book
 import com.marginalia.model.Highlight
 import com.marginalia.model.LinkedNote
+import com.marginalia.model.MarginAnnotation
 import com.marginalia.model.Result
 import com.marginalia.vault.LinkedNoteError
 import com.marginalia.vault.LinkedNoteGenerator
@@ -98,6 +99,66 @@ class AndroidLinkedNoteService(
     }
 
     override suspend fun getLinkedNote(bookId: String): LinkedNote? = null
+
+    override suspend fun addMarginAnnotationPlaceholder(
+        annotation: MarginAnnotation,
+        book: Book
+    ): Result<LinkedNote, LinkedNoteError> {
+        return try {
+            val notePath = annotation.linkedNotePath
+            val today = LocalDate.now().toString()
+            val chapterLabel = annotation.chapterLabel?.takeIf { it.isNotBlank() } ?: "Margin Note"
+            val blockId = "^margin-${annotation.annotationId}"
+
+            val placeholder = buildString {
+                append("\n### $chapterLabel — $today\n")
+                append("*[Handwritten margin note — transcription pending]*\n\n")
+                append("$blockId\n")
+            }
+
+            val existing = fileSystem.readFile(notePath) ?: ""
+
+            // Skip if this annotation placeholder already exists
+            if (existing.contains(blockId)) {
+                val note = LinkedNote(
+                    id = book.id, bookId = book.id, filePath = notePath,
+                    title = "${book.title} - ${book.author}",
+                    createdAt = 0L, lastModifiedAt = System.currentTimeMillis(),
+                    territoryId = book.territoryId
+                )
+                return Result.Success(note)
+            }
+
+            val marginSectionMarker = "## Margin Notes"
+            val updated = if (existing.contains(marginSectionMarker)) {
+                // Append after the Margin Notes header
+                val insertIdx = existing.indexOf(marginSectionMarker) + marginSectionMarker.length
+                existing.substring(0, insertIdx) + "\n" + placeholder + existing.substring(insertIdx)
+            } else {
+                // Append Margin Notes section before Reading Notes (if present), else at end
+                val readingNotes = "## Reading Notes"
+                if (existing.contains(readingNotes)) {
+                    val splitIdx = existing.indexOf(readingNotes)
+                    existing.substring(0, splitIdx) + "$marginSectionMarker\n$placeholder\n" + existing.substring(splitIdx)
+                } else {
+                    existing + "\n$marginSectionMarker\n$placeholder"
+                }
+            }
+
+            fileSystem.writeFile(notePath, updated)
+            Log.d(TAG, "addMarginAnnotationPlaceholder: wrote $blockId to $notePath")
+            val note = LinkedNote(
+                id = book.id, bookId = book.id, filePath = notePath,
+                title = "${book.title} - ${book.author}",
+                createdAt = 0L, lastModifiedAt = System.currentTimeMillis(),
+                territoryId = book.territoryId
+            )
+            Result.Success(note)
+        } catch (e: Exception) {
+            Log.e(TAG, "addMarginAnnotationPlaceholder failed: ${e.message}")
+            Result.Failure(LinkedNoteError.WriteError(e.message ?: "Unknown error"))
+        }
+    }
 
     private fun linkedNotePath(book: Book, territory: Territory): String {
         val sanitisedTitle = LinkedNoteGenerator.sanitiseFilename(book.title)

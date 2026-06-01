@@ -388,6 +388,11 @@ class ReaderViewModel @Inject constructor(
                 _annotationStrokes.value = _annotationStrokes.value + (annotationId to session.strokes.toList())
                 latestLocator?.let { updateVisibleAnnotations(it) }
                 Log.d(TAG, "Annotation saved: $annotationId with ${session.strokes.size} strokes")
+                // Add placeholder to linked note (Margin Notes section)
+                when (val noteResult = linkedNoteService.addMarginAnnotationPlaceholder(annotation, book)) {
+                    is Result.Success -> Log.d(TAG, "Margin placeholder added to linked note")
+                    is Result.Failure -> Log.e(TAG, "Failed to add margin placeholder: ${noteResult.error}")
+                }
             }
             is Result.Failure -> {
                 Log.e(TAG, "Failed to save annotation: ${result.error}")

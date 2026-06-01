@@ -4,6 +4,7 @@ import com.marginalia.animachora.Territory
 import com.marginalia.model.Book
 import com.marginalia.model.Highlight
 import com.marginalia.model.LinkedNote
+import com.marginalia.model.MarginAnnotation
 import com.marginalia.model.Result
 
 interface LinkedNoteService {
@@ -18,6 +19,11 @@ interface LinkedNoteService {
     ): Result<LinkedNote, LinkedNoteError>
 
     suspend fun getLinkedNote(bookId: String): LinkedNote?
+
+    suspend fun addMarginAnnotationPlaceholder(
+        annotation: MarginAnnotation,
+        book: Book
+    ): Result<LinkedNote, LinkedNoteError>
 }
 
 sealed class LinkedNoteError {
