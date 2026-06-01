@@ -5,12 +5,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.marginalia.android.platform.reader.OpenPublicationResult
 import com.marginalia.android.platform.reader.ReadiumBookOpener
+import com.marginalia.animachora.Territory
+import com.marginalia.animachora.TerritoryDefaults
+import com.marginalia.animachora.TerritoryType
 import com.marginalia.device.DisplayRefreshManager
+import com.marginalia.model.Book
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
 import com.marginalia.model.Result
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
+import com.marginalia.vault.LinkedNoteService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +41,7 @@ class ReaderViewModel @Inject constructor(
     private val bookOpener: ReadiumBookOpener,
     private val libraryRepository: LibraryRepository,
     private val highlightRepository: HighlightRepository,
+    private val linkedNoteService: LinkedNoteService,
     private val displayRefreshManager: DisplayRefreshManager
 ) : ViewModel() {
 
@@ -47,6 +53,7 @@ class ReaderViewModel @Inject constructor(
 
     private var openPublication: Publication? = null
     private var currentBookId: String? = null
+    private var currentBook: Book? = null
 
     fun openBook(bookId: String) {
         viewModelScope.launch {
@@ -57,8 +64,8 @@ class ReaderViewModel @Inject constructor(
                     _uiState.value = ReaderUiState.Error("Book not found")
                     return@launch
                 }
+            currentBook = book
 
-            // Load existing highlights
             val highlights = highlightRepository.getHighlights(bookId)
             _highlights.value = highlights
 
@@ -96,8 +103,10 @@ class ReaderViewModel @Inject constructor(
             )
             when (val result = highlightRepository.addHighlight(highlight)) {
                 is Result.Success -> {
-                    _highlights.value = _highlights.value + highlight
+                    val updated = _highlights.value + highlight
+                    _highlights.value = updated
                     Log.d(TAG, "Highlight created: ${highlight.id}")
+                    updateLinkedNote(bookId, updated)
                 }
                 is Result.Failure ->
                     Log.e(TAG, "Failed to save highlight: ${result.error}")
@@ -117,6 +126,43 @@ class ReaderViewModel @Inject constructor(
             }
         }
     }
+
+    private suspend fun updateLinkedNote(bookId: String, highlights: List<Highlight>) {
+        val book = currentBook ?: return
+        val territory = bookToTerritory(book)
+        val existing = linkedNoteService.getLinkedNote(bookId)
+        if (existing == null) {
+            when (val result = linkedNoteService.createLinkedNote(book, territory)) {
+                is Result.Success -> {
+                    Log.d(TAG, "Linked note created for $bookId")
+                    // updateLinkedNote with highlights on the freshly created note
+                    linkedNoteService.updateLinkedNote(result.value, highlights)
+                }
+                is Result.Failure ->
+                    Log.e(TAG, "Failed to create linked note: ${result.error}")
+            }
+        } else {
+            when (val result = linkedNoteService.updateLinkedNote(existing, highlights)) {
+                is Result.Success -> Log.d(TAG, "Linked note updated for $bookId")
+                is Result.Failure ->
+                    Log.e(TAG, "Failed to update linked note: ${result.error}")
+            }
+        }
+    }
+
+    private fun bookToTerritory(book: Book): Territory = Territory(
+        id = book.territoryId,
+        name = book.territoryId,
+        type = TerritoryType.LIBRARY,
+        folderPath = book.territoryId,
+        symbol = TerritoryDefaults.defaultSymbol(TerritoryType.LIBRARY),
+        shade = TerritoryDefaults.defaultShade(TerritoryType.LIBRARY),
+        colour = null,
+        ghostSymbolOpacity = 5,
+        isPrivate = false,
+        createdAt = 0L,
+        lastEnteredAt = null
+    )
 
     fun onPageTurn() {
         displayRefreshManager.refreshFull()

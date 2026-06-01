@@ -1,5 +1,7 @@
 package com.marginalia.android.ui.library
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +38,8 @@ import com.marginalia.android.R
 import com.marginalia.model.Book
 import com.marginalia.model.ReadingStatus
 
+private val EPUB_MIME_TYPES = arrayOf("application/epub+zip", "application/pdf")
+
 @Composable
 fun LibraryScreen(
     territoryId: String,
@@ -46,12 +50,24 @@ fun LibraryScreen(
         viewModel.loadBooks(territoryId)
     }
 
+    val pickEpub = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.importBook(it) }
+    }
+
     val uiState by viewModel.uiState.collectAsState()
 
     when (val state = uiState) {
         is LibraryUiState.Loading -> LibraryLoadingState()
-        is LibraryUiState.Empty -> LibraryEmptyState()
-        is LibraryUiState.Books -> LibraryBookGrid(state.list, onBookClick)
+        is LibraryUiState.Empty -> LibraryEmptyState(
+            onAddBook = { pickEpub.launch(EPUB_MIME_TYPES) }
+        )
+        is LibraryUiState.Books -> LibraryBookGrid(
+            books = state.list,
+            onBookClick = onBookClick,
+            onAddBook = { pickEpub.launch(EPUB_MIME_TYPES) }
+        )
         is LibraryUiState.Error -> LibraryErrorState(state.message) {
             viewModel.loadBooks(territoryId)
         }
@@ -76,7 +92,7 @@ private fun LibraryLoadingState() {
 }
 
 @Composable
-private fun LibraryEmptyState() {
+private fun LibraryEmptyState(onAddBook: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -96,7 +112,7 @@ private fun LibraryEmptyState() {
                 color = Color.Gray
             )
             Button(
-                onClick = {},
+                onClick = onAddBook,
                 modifier = Modifier.padding(top = 8.dp)
             ) {
                 Text(stringResource(R.string.library_add_book))
@@ -124,16 +140,30 @@ private fun LibraryErrorState(message: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun LibraryBookGrid(books: List<Book>, onBookClick: (String) -> Unit) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        contentPadding = PaddingValues(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        items(books, key = { it.id }) { book ->
-            BookCard(book = book, onClick = { onBookClick(book.id) })
+private fun LibraryBookGrid(
+    books: List<Book>,
+    onBookClick: (String) -> Unit,
+    onAddBook: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Button(
+            onClick = onAddBook,
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.library_add_book))
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(books, key = { it.id }) { book ->
+                BookCard(book = book, onClick = { onBookClick(book.id) })
+            }
         }
     }
 }
@@ -146,7 +176,6 @@ private fun BookCard(book: Book, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .background(Color.White)
     ) {
-        // Cover placeholder — greyscale rectangle until real covers are loaded
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -186,7 +215,6 @@ private fun BookCard(book: Book, onClick: () -> Unit) {
             )
         }
 
-        // Progress bar at bottom of card
         if (book.readingProgress.percentage > 0f) {
             LinearProgressIndicator(
                 progress = { book.readingProgress.percentage },
