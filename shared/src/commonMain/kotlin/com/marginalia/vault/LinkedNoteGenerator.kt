@@ -51,8 +51,14 @@ object LinkedNoteGenerator {
                 if (highlight.emotionalTag != null) {
                     sb.append("%%emotion:${highlight.emotionalTag.name.lowercase()}%%\n")
                 }
-                if (!highlight.annotation.isNullOrEmpty()) {
-                    sb.append("\n*${highlight.annotation}*\n")
+                val hasAnnotation = !highlight.annotation.isNullOrEmpty()
+                val hasLink = !highlight.conceptLink.isNullOrEmpty()
+                if (hasAnnotation || hasLink) {
+                    sb.append("\n")
+                    val annotationPart = if (hasAnnotation) "*${highlight.annotation}*" else ""
+                    val linkPart = if (hasLink) highlight.conceptLink!! else ""
+                    val line = listOf(annotationPart, linkPart).filter { it.isNotEmpty() }.joinToString(" · ")
+                    sb.append("$line\n")
                 }
                 sb.append("\n")
             }

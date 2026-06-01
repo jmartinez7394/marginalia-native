@@ -63,8 +63,15 @@ class AndroidLinkedNoteService(
                     h.emotionalTag?.let { tag ->
                         append("%%emotion:${tag.name.lowercase()}%%\n")
                     }
-                    if (!h.annotation.isNullOrEmpty()) {
-                        append("\n*${h.annotation}*\n")
+                    val hasAnnotation = !h.annotation.isNullOrEmpty()
+                    val hasLink = !h.conceptLink.isNullOrEmpty()
+                    if (hasAnnotation || hasLink) {
+                        append("\n")
+                        val annotationPart = if (hasAnnotation) "*${h.annotation}*" else ""
+                        val linkPart = if (hasLink) h.conceptLink!! else ""
+                        val line = listOf(annotationPart, linkPart)
+                            .filter { it.isNotEmpty() }.joinToString(" · ")
+                        append("$line\n")
                     }
                     append("\n")
                 }

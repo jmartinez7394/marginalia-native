@@ -13,6 +13,7 @@ data class Highlight(
     val colour: HighlightColour,
     val annotation: String?,
     val emotionalTag: EmotionalTag? = null,
+    val conceptLink: String? = null,
     val createdAt: Long,
     val pageNumber: Int?
 )

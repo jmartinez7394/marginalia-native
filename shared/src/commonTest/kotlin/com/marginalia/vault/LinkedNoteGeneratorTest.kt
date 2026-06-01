@@ -15,6 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class LinkedNoteGeneratorTest {
@@ -192,6 +193,29 @@ class LinkedNoteGeneratorTest {
         val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
         assertTrue(result.contains("%%emotion:resistant%%"), "Emotion tag must be lowercase in metadata")
         assertFalse(result.contains("%%emotion:RESISTANT%%"), "Uppercase variant must not appear")
+    }
+
+    @Test
+    fun `concept wikilink appears in block with annotation`() {
+        val highlight = makeHighlight("h1", "A passage").copy(
+            annotation = "My thought",
+            conceptLink = "[[Virtue Ethics]]"
+        )
+        val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
+        assertTrue(result.contains("[[Virtue Ethics]]"), "Wikilink must appear in block")
+        assertTrue(result.contains("*My thought* · [[Virtue Ethics]]"), "Annotation and wikilink joined with ·")
+    }
+
+    @Test
+    fun `wikilink appears alone when no annotation`() {
+        val highlight = makeHighlight("h1", "A passage").copy(conceptLink = "[[Stoicism]]")
+        val result = LinkedNoteGenerator.generate(testBook, listOf(highlight), testTerritory, "2026-06-01")
+        assertTrue(result.contains("[[Stoicism]]"))
+        val lines = result.lines()
+        val wikiLine = lines.find { it.contains("[[Stoicism]]") }
+        assertNotNull(wikiLine)
+        // Should NOT be prefixed with annotation marker when no annotation
+        assertFalse(wikiLine!!.startsWith("*"), "No italic prefix when annotation is null")
     }
 
     @Test

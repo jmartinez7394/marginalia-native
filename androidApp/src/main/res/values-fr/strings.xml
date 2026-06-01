@@ -28,6 +28,12 @@
 
     <!-- Concept registry -->
     <string name="library_concept_candidates">TODO: %d candidat(s) de concept prêts pour révision</string>
+    <string name="concept_add_to">TODO: Ajouter au concept</string>
+    <string name="concept_view">TODO: Voir le concept</string>
+    <string name="concept_name_hint">TODO: Nom du concept…</string>
+    <string name="concept_create_new">TODO: Créer : %s</string>
+    <string name="concept_link_title">TODO: Lier à un concept</string>
+    <string name="concept_no_matches">TODO: Aucun concept existant ne correspond</string>
 
     <!-- Emotional resonance tags -->
     <string name="emotion_moved">TODO: ◉ Touché</string>

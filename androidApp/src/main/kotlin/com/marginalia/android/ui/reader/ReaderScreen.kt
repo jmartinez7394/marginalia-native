@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +48,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.marginalia.android.BuildConfig
 import com.marginalia.android.R
+import com.marginalia.model.ConceptNote
 import com.marginalia.model.EmotionalTag
 import com.marginalia.model.Highlight
 import com.marginalia.model.HighlightColour
@@ -422,6 +425,8 @@ private fun ReadyReader(
     }
 
     // Existing highlight editing — annotation sheet
+    var showConceptLinkSheet by remember { mutableStateOf(false) }
+
     if (selectedHighlight != null) {
         AnnotationBottomSheet(
             highlight = selectedHighlight,
@@ -439,7 +444,30 @@ private fun ReadyReader(
                 viewModel.deleteHighlight(selectedHighlight.id)
                 selectedHighlightId = null
             },
+            onAddToConcept = { showConceptLinkSheet = true },
             onDismiss = { selectedHighlightId = null }
+        )
+    }
+
+    if (showConceptLinkSheet && selectedHighlight != null) {
+        val capturedHighlight = selectedHighlight
+        ConceptLinkSheet(
+            highlight = capturedHighlight,
+            onSearchConcepts = { query -> viewModel.searchConcepts(query) },
+            onCreateNew = { name ->
+                viewModel.createConceptFromHighlight(
+                    conceptName = name,
+                    highlight = capturedHighlight,
+                    onSuccess = { showConceptLinkSheet = false; selectedHighlightId = null },
+                    onError = {}
+                )
+            },
+            onLinkExisting = { concept ->
+                viewModel.updateHighlight(capturedHighlight.copy(conceptLink = "[[${concept.name}]]"))
+                showConceptLinkSheet = false
+                selectedHighlightId = null
+            },
+            onDismiss = { showConceptLinkSheet = false }
         )
     }
 }
@@ -450,6 +478,7 @@ private fun AnnotationBottomSheet(
     highlight: Highlight,
     onSave: (annotation: String, colour: HighlightColour, emotionalTag: EmotionalTag?) -> Unit,
     onDelete: () -> Unit,
+    onAddToConcept: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var annotationText by remember(highlight.id) { mutableStateOf(highlight.annotation ?: "") }
@@ -575,6 +604,26 @@ private fun AnnotationBottomSheet(
                 )
             }
 
+            // Concept link button — "Add to concept" or "View concept [[Name]]"
+            if (highlight.conceptLink.isNullOrEmpty()) {
+                OutlinedButton(
+                    onClick = onAddToConcept,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.concept_add_to), style = MaterialTheme.typography.labelSmall)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onAddToConcept,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "${stringResource(R.string.concept_view)} ${highlight.conceptLink}",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+
             // Save
             Button(
                 onClick = {
@@ -622,6 +671,83 @@ private fun ColourButton(
     } else {
         OutlinedButton(onClick = { onSelect(colour) }, modifier = modifier) {
             Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConceptLinkSheet(
+    highlight: Highlight,
+    onSearchConcepts: suspend (String) -> List<ConceptNote>,
+    onCreateNew: (String) -> Unit,
+    onLinkExisting: (ConceptNote) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf(emptyList<ConceptNote>()) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(searchQuery) {
+        searchResults = onSearchConcepts(searchQuery)
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.concept_link_title),
+                style = MaterialTheme.typography.titleSmall
+            )
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text(stringResource(R.string.concept_name_hint)) },
+                singleLine = true
+            )
+            // "Create new" option — always shown when query is non-empty
+            if (searchQuery.trim().isNotEmpty()) {
+                OutlinedButton(
+                    onClick = {
+                        val name = searchQuery.trim()
+                        scope.launch { sheetState.hide(); onCreateNew(name) }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.concept_create_new, searchQuery.trim()))
+                }
+            }
+            // Existing concept matches
+            if (searchResults.isNotEmpty()) {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(searchResults) { concept ->
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch { sheetState.hide(); onLinkExisting(concept) }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("${concept.name} (${concept.status.name.lowercase()})")
+                        }
+                    }
+                }
+            } else if (searchQuery.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.concept_no_matches),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

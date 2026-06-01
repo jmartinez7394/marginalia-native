@@ -1,6 +1,9 @@
 package com.marginalia.vault
 
+import com.marginalia.animachora.Territory
+import com.marginalia.model.Book
 import com.marginalia.model.ConceptNote
+import com.marginalia.model.Highlight
 import com.marginalia.model.Result
 import kotlinx.coroutines.flow.Flow
 
@@ -12,6 +15,12 @@ interface ConceptRegistry {
     suspend fun addConcept(concept: ConceptNote): Result<ConceptNote, RegistryError>
     suspend fun updateConcept(concept: ConceptNote): Result<ConceptNote, RegistryError>
     fun observeConcepts(territoryId: String): Flow<List<ConceptNote>>
+    suspend fun createFromHighlight(
+        conceptName: String,
+        highlight: Highlight,
+        sourceBook: Book,
+        territory: Territory
+    ): Result<ConceptNote, RegistryError>
 }
 
 sealed class RegistryError {

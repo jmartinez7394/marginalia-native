@@ -18,6 +18,7 @@ import com.marginalia.model.ReadingProgress
 import com.marginalia.model.ReadingStatus
 import com.marginalia.model.Result
 import com.marginalia.settings.SettingsRegistry
+import com.marginalia.vault.ConceptRegistry
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
 import com.marginalia.vault.LinkedNoteService
@@ -54,6 +55,7 @@ class ReaderViewModel @Inject constructor(
     private val highlightRepository: HighlightRepository,
     private val linkedNoteService: LinkedNoteService,
     private val registrySignalService: RegistrySignalService,
+    private val conceptRegistry: ConceptRegistry,
     private val displayRefreshManager: DisplayRefreshManager,
     private val settingsRegistry: SettingsRegistry
 ) : ViewModel() {
@@ -270,6 +272,41 @@ class ReaderViewModel @Inject constructor(
                 is Result.Success -> Log.d(TAG, "Linked note updated for $bookId")
                 is Result.Failure ->
                     Log.e(TAG, "Failed to update linked note: ${result.error}")
+            }
+        }
+    }
+
+    suspend fun searchConcepts(query: String): List<com.marginalia.model.ConceptNote> {
+        val book = currentBook ?: return emptyList()
+        return if (query.isBlank()) emptyList()
+        else conceptRegistry.getAllConcepts(book.territoryId)
+            .filter { it.name.contains(query, ignoreCase = true) }
+    }
+
+    fun createConceptFromHighlight(
+        conceptName: String,
+        highlight: Highlight,
+        onSuccess: (String) -> Unit,
+        onError: () -> Unit
+    ) {
+        val book = currentBook ?: return onError()
+        viewModelScope.launch(Dispatchers.IO) {
+            val territory = bookToTerritory(book)
+            when (val result = conceptRegistry.createFromHighlight(conceptName, highlight, book, territory)) {
+                is Result.Success -> {
+                    val wikilink = "[[${conceptName}]]"
+                    val updatedHighlight = highlight.copy(conceptLink = wikilink)
+                    highlightRepository.updateHighlight(updatedHighlight)
+                    val updated = _highlights.value.map { if (it.id == highlight.id) updatedHighlight else it }
+                    _highlights.value = updated
+                    Log.d(TAG, "Concept created: $conceptName, wikilink added to highlight")
+                    onSuccess(wikilink)
+                    updateLinkedNote(book.id, updated)
+                }
+                is Result.Failure -> {
+                    Log.e(TAG, "Failed to create concept: ${result.error}")
+                    onError()
+                }
             }
         }
     }

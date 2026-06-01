@@ -8,9 +8,12 @@ import com.marginalia.vault.HighlightFileRepository
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
 import com.marginalia.vault.LinkedNoteService
+import com.marginalia.vault.ConceptFileRegistry
+import com.marginalia.vault.ConceptRegistry
 import com.marginalia.vault.RegistrySignalFileService
 import com.marginalia.vault.RegistrySignalService
 import com.marginalia.vault.VaultFileSystem
+import java.time.LocalDate
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -57,4 +60,9 @@ object VaultModule {
     @Singleton
     fun provideRegistrySignalService(fileSystem: VaultFileSystem): RegistrySignalService =
         RegistrySignalFileService(fileSystem, clock = { System.currentTimeMillis() })
+
+    @Provides
+    @Singleton
+    fun provideConceptRegistry(fileSystem: VaultFileSystem): ConceptRegistry =
+        ConceptFileRegistry(fileSystem, todayIso = { LocalDate.now().toString() })
 }
