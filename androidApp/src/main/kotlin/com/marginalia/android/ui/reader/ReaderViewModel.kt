@@ -159,13 +159,31 @@ class ReaderViewModel @Inject constructor(
     // --- Refresh events ---
 
     fun onPageTurn() {
-        displayRefreshManager.refreshFull()
-        _debugRefreshMode.value = RefreshMode.GC16
+        val delayMs = settingsRegistry.get(AppSettings.REFRESH_PAGE_TURN_DELAY_MS).toLong()
+        if (delayMs > 0) {
+            viewModelScope.launch {
+                delay(delayMs)
+                displayRefreshManager.refreshFull()
+                _debugRefreshMode.value = RefreshMode.GC16
+            }
+        } else {
+            displayRefreshManager.refreshFull()
+            _debugRefreshMode.value = RefreshMode.GC16
+        }
     }
 
     fun onChapterNav() {
-        displayRefreshManager.refreshFull()
-        _debugRefreshMode.value = RefreshMode.GC16
+        val delayMs = settingsRegistry.get(AppSettings.REFRESH_PAGE_TURN_DELAY_MS).toLong()
+        if (delayMs > 0) {
+            viewModelScope.launch {
+                delay(delayMs)
+                displayRefreshManager.refreshFull()
+                _debugRefreshMode.value = RefreshMode.GC16
+            }
+        } else {
+            displayRefreshManager.refreshFull()
+            _debugRefreshMode.value = RefreshMode.GC16
+        }
     }
 
     fun onScrollActive() {
