@@ -55,6 +55,7 @@ import org.readium.r2.navigator.SelectableNavigator
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.preferences.ColumnCount
 import org.readium.r2.navigator.preferences.Spread
 import org.readium.r2.navigator.input.DragEvent
 import org.readium.r2.navigator.input.InputListener
@@ -213,7 +214,10 @@ private fun ReadyReader(
             val navigatorFactory = EpubNavigatorFactory(publication)
             val fragmentFactory = navigatorFactory.createFragmentFactory(
                 initialLocator = initialLocator,
-                initialPreferences = EpubPreferences(spread = Spread.NEVER)
+                initialPreferences = EpubPreferences(
+                    spread = Spread.NEVER,
+                    columnCount = ColumnCount.ONE
+                )
             )
             fragmentManager.fragmentFactory = fragmentFactory
             fragmentManager.beginTransaction()
