@@ -16,6 +16,7 @@ import com.marginalia.model.ReadingStatus
 import com.marginalia.model.Result
 import com.marginalia.settings.SettingsRegistry
 import com.marginalia.vault.LibraryRepository
+import com.marginalia.vault.RegistrySignalService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -44,7 +45,8 @@ class LibraryViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     @VaultRootPath private val vaultRootPath: String,
     private val displayRefreshManager: DisplayRefreshManager,
-    private val settingsRegistry: SettingsRegistry
+    private val settingsRegistry: SettingsRegistry,
+    private val registrySignalService: RegistrySignalService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<LibraryUiState>(LibraryUiState.Loading)
@@ -52,6 +54,9 @@ class LibraryViewModel @Inject constructor(
 
     private val _debugRefreshMode = MutableStateFlow<RefreshMode?>(null)
     val debugRefreshMode: StateFlow<RefreshMode?> = _debugRefreshMode.asStateFlow()
+
+    private val _pendingCandidateCount = MutableStateFlow(0)
+    val pendingCandidateCount: StateFlow<Int> = _pendingCandidateCount.asStateFlow()
 
     private var currentTerritoryId = "library"
     private var scrollSettleJob: Job? = null
@@ -68,6 +73,18 @@ class LibraryViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "loadBooks($territoryId): exception — ${e.message}", e)
                 _uiState.value = LibraryUiState.Error(e.message ?: "Unknown error")
+            }
+            checkPendingCandidates(territoryId)
+        }
+    }
+
+    private fun checkPendingCandidates(territoryId: String) {
+        val threshold = settingsRegistry.get(AppSettings.REGISTRY_SIGNAL_THRESHOLD)
+        viewModelScope.launch(Dispatchers.IO) {
+            val pending = registrySignalService.getPendingCandidates(territoryId, threshold)
+            _pendingCandidateCount.value = pending.size
+            if (pending.isNotEmpty()) {
+                Log.d(TAG, "checkPendingCandidates: ${pending.size} candidates ready for review")
             }
         }
     }

@@ -21,6 +21,9 @@ import com.marginalia.settings.SettingsRegistry
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
 import com.marginalia.vault.LinkedNoteService
+import com.marginalia.vault.RegistrySignalService
+import com.marginalia.vault.SignalDetector
+import com.marginalia.model.SignalSourceType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,6 +53,7 @@ class ReaderViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val highlightRepository: HighlightRepository,
     private val linkedNoteService: LinkedNoteService,
+    private val registrySignalService: RegistrySignalService,
     private val displayRefreshManager: DisplayRefreshManager,
     private val settingsRegistry: SettingsRegistry
 ) : ViewModel() {
@@ -136,6 +140,7 @@ class ReaderViewModel @Inject constructor(
                     Log.d(TAG, "Highlight created: ${highlight.id}")
                     onHighlightApplied()
                     updateLinkedNote(bookId, updated)
+                    recordSignals(highlight)
                 }
                 is Result.Failure ->
                     Log.e(TAG, "Failed to save highlight: ${result.error}")
@@ -265,6 +270,25 @@ class ReaderViewModel @Inject constructor(
                 is Result.Success -> Log.d(TAG, "Linked note updated for $bookId")
                 is Result.Failure ->
                     Log.e(TAG, "Failed to update linked note: ${result.error}")
+            }
+        }
+    }
+
+    private suspend fun recordSignals(highlight: Highlight) {
+        val book = currentBook ?: return
+        val candidates = SignalDetector.extractCandidates(highlight.text)
+        val notePath = "${book.territoryId}/notes/${book.title} - ${book.author}.md"
+        for (candidate in candidates) {
+            try {
+                registrySignalService.recordSignal(
+                    conceptCandidate = candidate,
+                    sourceType = SignalSourceType.HIGHLIGHT,
+                    sourceId = highlight.id,
+                    sourcePath = notePath,
+                    territoryId = book.territoryId
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to record signal for '$candidate': ${e.message}")
             }
         }
     }

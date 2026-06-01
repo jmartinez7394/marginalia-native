@@ -8,6 +8,8 @@ import com.marginalia.vault.HighlightFileRepository
 import com.marginalia.vault.HighlightRepository
 import com.marginalia.vault.LibraryRepository
 import com.marginalia.vault.LinkedNoteService
+import com.marginalia.vault.RegistrySignalFileService
+import com.marginalia.vault.RegistrySignalService
 import com.marginalia.vault.VaultFileSystem
 import dagger.Module
 import dagger.Provides
@@ -50,4 +52,9 @@ object VaultModule {
     @Singleton
     fun provideLinkedNoteService(fileSystem: VaultFileSystem): LinkedNoteService =
         AndroidLinkedNoteService(fileSystem)
+
+    @Provides
+    @Singleton
+    fun provideRegistrySignalService(fileSystem: VaultFileSystem): RegistrySignalService =
+        RegistrySignalFileService(fileSystem, clock = { System.currentTimeMillis() })
 }

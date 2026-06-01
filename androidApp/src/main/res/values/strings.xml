@@ -26,6 +26,9 @@
     <string name="highlight_add_annotation">Add annotation</string>
     <string name="highlight_delete">Delete highlight</string>
 
+    <!-- Concept registry -->
+    <string name="library_concept_candidates">%d concept candidate(s) ready for review</string>
+
     <!-- Emotional resonance tags -->
     <string name="emotion_moved">◉ Moved</string>
     <string name="emotion_troubled">△ Troubled</string>

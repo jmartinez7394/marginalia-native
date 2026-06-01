@@ -74,6 +74,22 @@ object AppSettings {
         description = "Refresh mode after canvas zoom gesture ends"
     )
 
+    // Concept registry
+    val REGISTRY_SIGNAL_THRESHOLD = Setting(
+        key = "registry.signal_threshold",
+        default = 3,
+        userVisible = false,
+        category = SettingCategory.ADVANCED,
+        description = "Number of occurrences before a concept candidate is surfaced for review"
+    )
+    val REGISTRY_DEFER_DAYS = Setting(
+        key = "registry.defer_days",
+        default = 7,
+        userVisible = false,
+        category = SettingCategory.ADVANCED,
+        description = "Days to defer a concept candidate before re-surfacing"
+    )
+
     // Debug
     val DEBUG_EINK_OVERLAY_ENABLED = Setting(
         key = "debug.eink_overlay_enabled",
@@ -102,6 +118,8 @@ object AppSettings {
         REFRESH_PAGE_TURN,
         REFRESH_CANVAS_PAN_SETTLE,
         REFRESH_CANVAS_ZOOM_SETTLE,
+        REGISTRY_SIGNAL_THRESHOLD,
+        REGISTRY_DEFER_DAYS,
         DEBUG_EINK_OVERLAY_ENABLED,
         READING_VOLUME_KEYS_PAGE_TURN
     )

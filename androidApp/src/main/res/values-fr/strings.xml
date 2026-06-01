@@ -26,6 +26,9 @@
     <string name="highlight_add_annotation">TODO: Ajouter une annotation</string>
     <string name="highlight_delete">TODO: Supprimer le surlignage</string>
 
+    <!-- Concept registry -->
+    <string name="library_concept_candidates">TODO: %d candidat(s) de concept prêts pour révision</string>
+
     <!-- Emotional resonance tags -->
     <string name="emotion_moved">TODO: ◉ Touché</string>
     <string name="emotion_troubled">TODO: △ Troublé</string>

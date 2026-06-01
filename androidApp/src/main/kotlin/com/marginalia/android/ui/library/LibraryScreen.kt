@@ -62,6 +62,7 @@ fun LibraryScreen(
     }
 
     val uiState by viewModel.uiState.collectAsState()
+    val pendingCandidateCount by viewModel.pendingCandidateCount.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         when (val state = uiState) {
@@ -74,6 +75,7 @@ fun LibraryScreen(
             )
             is LibraryUiState.Books -> LibraryBookGrid(
                 books = state.list,
+                pendingCandidateCount = pendingCandidateCount,
                 onBookClick = { bookId -> onBookClick(bookId) },
                 onAddBook = {
                     viewModel.onAddBookTap()
@@ -165,6 +167,7 @@ private fun LibraryErrorState(message: String, onRetry: () -> Unit) {
 @Composable
 private fun LibraryBookGrid(
     books: List<Book>,
+    pendingCandidateCount: Int = 0,
     onBookClick: (String) -> Unit,
     onAddBook: () -> Unit,
     onScrollStart: () -> Unit = {},
@@ -172,7 +175,6 @@ private fun LibraryBookGrid(
 ) {
     val lazyGridState = rememberLazyGridState()
 
-    // A2 while scrolling, REGAL on scroll settle.
     LaunchedEffect(lazyGridState.isScrollInProgress) {
         if (lazyGridState.isScrollInProgress) onScrollStart() else onScrollEnd()
     }
@@ -188,6 +190,15 @@ private fun LibraryBookGrid(
                 .fillMaxWidth()
         ) {
             Text(stringResource(R.string.library_add_book))
+        }
+        // Subtle concept candidate indicator — shown only when candidates are pending
+        if (pendingCandidateCount > 0) {
+            Text(
+                text = stringResource(R.string.library_concept_candidates, pendingCandidateCount),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
         }
         LazyVerticalGrid(
             state = lazyGridState,
