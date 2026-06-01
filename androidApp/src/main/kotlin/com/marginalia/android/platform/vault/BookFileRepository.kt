@@ -1,5 +1,6 @@
 package com.marginalia.android.platform.vault
 
+import android.util.Log
 import com.marginalia.model.Book
 import com.marginalia.model.LinkedNote
 import com.marginalia.model.Result
@@ -90,10 +91,31 @@ class BookFileRepository(
         _territoryBooks.map { it[territoryId] ?: emptyList() }
 
     private suspend fun loadFromDisk(territoryId: String): List<Book> {
-        val content = fileSystem.readFile(libraryJsonPath(territoryId)) ?: return emptyList()
+        val path = libraryJsonPath(territoryId)
+        val raw = fileSystem.readFile(path)
+        if (raw == null) {
+            Log.d(TAG, "loadFromDisk: no file at $path")
+            return emptyList()
+        }
+        Log.d(TAG, "loadFromDisk: read ${raw.length} chars from $path")
+
+        // Strip UTF-8 BOM (U+FEFF) if present — added by Windows editors and some tools.
+        // trimStart removes all leading BOM chars, not just one.
+        val hasBom = raw.isNotEmpty() && raw[0].code == 0xFEFF
+        val content = if (hasBom) {
+            Log.d(TAG, "loadFromDisk: stripping UTF-8 BOM from $path")
+            raw.drop(1)
+        } else {
+            raw
+        }
+
         return try {
-            json.decodeFromString<LibraryJson>(content).books
+            val result = json.decodeFromString<LibraryJson>(content).books
+            Log.d(TAG, "loadFromDisk: parsed ${result.size} books from $path")
+            result
         } catch (e: Exception) {
+            Log.e(TAG, "loadFromDisk: JSON parse failed for $path — ${e.message}")
+            Log.e(TAG, "loadFromDisk: content preview: ${content.take(200)}")
             emptyList()
         }
     }
@@ -111,4 +133,8 @@ class BookFileRepository(
     }
 
     private fun libraryJsonPath(territoryId: String) = "$territoryId/.marginalia/library.json"
+
+    companion object {
+        private const val TAG = "BookFileRepository"
+    }
 }

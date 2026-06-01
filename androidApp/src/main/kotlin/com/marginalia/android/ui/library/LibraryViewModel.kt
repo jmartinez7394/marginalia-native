@@ -1,5 +1,6 @@
 package com.marginalia.android.ui.library
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.marginalia.model.Book
@@ -31,11 +32,17 @@ class LibraryViewModel @Inject constructor(
             _uiState.value = LibraryUiState.Loading
             try {
                 val books = libraryRepository.getAllBooks(territoryId)
+                Log.d(TAG, "loadBooks($territoryId): ${books.size} books returned")
                 _uiState.value = if (books.isEmpty()) LibraryUiState.Empty
                 else LibraryUiState.Books(books)
             } catch (e: Exception) {
+                Log.e(TAG, "loadBooks($territoryId): exception — ${e.message}", e)
                 _uiState.value = LibraryUiState.Error(e.message ?: "Unknown error")
             }
         }
+    }
+
+    companion object {
+        private const val TAG = "LibraryViewModel"
     }
 }

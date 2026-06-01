@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
                         )
                     } else {
                         LibraryScreen(
-                            territoryId = "library-default",
+                            territoryId = "library",
                             onBookClick = { bookId -> openBookId = bookId }
                         )
                     }

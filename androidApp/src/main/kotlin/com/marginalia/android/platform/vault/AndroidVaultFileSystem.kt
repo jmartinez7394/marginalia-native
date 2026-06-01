@@ -1,5 +1,6 @@
 package com.marginalia.android.platform.vault
 
+import android.util.Log
 import com.marginalia.vault.VaultFileSystem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -9,15 +10,23 @@ class AndroidVaultFileSystem(
     private val vaultRoot: File
 ) : VaultFileSystem {
 
+    init {
+        Log.i(TAG, "Vault root: ${vaultRoot.absolutePath}")
+    }
+
     override suspend fun readFile(path: String): String? = withContext(Dispatchers.IO) {
         val file = File(vaultRoot, path)
-        if (file.exists()) file.readText() else null
+        val exists = file.exists()
+        Log.d(TAG, "readFile: $path → exists=$exists (${file.absolutePath})")
+        if (exists) file.readText() else null
     }
 
     override suspend fun writeFile(path: String, content: String) = withContext(Dispatchers.IO) {
         val file = File(vaultRoot, path)
         file.parentFile?.mkdirs()
         file.writeText(content)
+        Log.d(TAG, "writeFile: $path (${content.length} chars)")
+        Unit
     }
 
     override suspend fun deleteFile(path: String) = withContext(Dispatchers.IO) {
@@ -46,5 +55,9 @@ class AndroidVaultFileSystem(
         dest.parentFile?.mkdirs()
         source.renameTo(dest)
         Unit
+    }
+
+    companion object {
+        private const val TAG = "AndroidVaultFileSystem"
     }
 }
