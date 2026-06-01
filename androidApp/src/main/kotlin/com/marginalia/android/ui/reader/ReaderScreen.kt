@@ -322,6 +322,22 @@ private fun ReadyReader(
         modifier = Modifier.fillMaxSize()
     )
 
+    // Annotation overlay — renders saved ink strokes for the current page (above Readium, below InkOverlay).
+    val visibleStrokes by viewModel.visibleAnnotationStrokes.collectAsState()
+    val annotationOverlayRef = remember { mutableStateOf<AnnotationOverlayView?>(null) }
+    AndroidView(
+        factory = { ctx ->
+            AnnotationOverlayView(ctx).also {
+                annotationOverlayRef.value = it
+                it.setBackgroundColor(Color.TRANSPARENT)
+            }
+        },
+        update = { overlay ->
+            overlay.updateStrokes(visibleStrokes)
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+
     // Ink overlay — positioned above Readium, transparent to input when annotation inactive.
     // Captures stylus events and double-tap in annotation mode. Double-tap works for all
     // input types so the emulator can trigger annotation mode without a physical stylus.

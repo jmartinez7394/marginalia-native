@@ -98,6 +98,12 @@ class ReaderViewModel @Inject constructor(
     private val _currentAnnotations = MutableStateFlow<List<MarginAnnotation>>(emptyList())
     val currentAnnotations: StateFlow<List<MarginAnnotation>> = _currentAnnotations.asStateFlow()
 
+    // annotationId → strokes loaded from InkNote JSON
+    private val _annotationStrokes = MutableStateFlow<Map<String, List<Stroke>>>(emptyMap())
+    // strokes for the currently visible page/chapter
+    private val _visibleAnnotationStrokes = MutableStateFlow<List<Stroke>>(emptyList())
+    val visibleAnnotationStrokes: StateFlow<List<Stroke>> = _visibleAnnotationStrokes.asStateFlow()
+
     private var openPublication: Publication? = null
     private var currentBookId: String? = null
     private var currentBook: Book? = null
@@ -122,6 +128,7 @@ class ReaderViewModel @Inject constructor(
 
             val annotations = annotationRepository.getAnnotationsForBook(bookId)
             _currentAnnotations.value = annotations
+            loadAnnotationStrokes(annotations, book.territoryId)
 
             // Restore last reading position from saved progress.
             val savedLocator: Locator? = book.readingProgress.cfi?.takeIf { it.isNotEmpty() }?.let { stored ->
@@ -378,6 +385,8 @@ class ReaderViewModel @Inject constructor(
         when (val result = annotationRepository.saveAnnotation(annotation)) {
             is Result.Success -> {
                 _currentAnnotations.value = _currentAnnotations.value + annotation
+                _annotationStrokes.value = _annotationStrokes.value + (annotationId to session.strokes.toList())
+                latestLocator?.let { updateVisibleAnnotations(it) }
                 Log.d(TAG, "Annotation saved: $annotationId with ${session.strokes.size} strokes")
             }
             is Result.Failure -> {
@@ -536,7 +545,12 @@ class ReaderViewModel @Inject constructor(
     )
 
     fun updateProgress(locator: Locator) {
+        val previousHref = latestLocator?.href?.toString()
         latestLocator = locator
+        val newHref = locator.href.toString()
+        if (previousHref != newHref) {
+            updateVisibleAnnotations(locator)
+        }
         val book = currentBook ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val locatorJson = try { locator.toJSON().toString() } catch (e: Exception) { null }
@@ -569,6 +583,98 @@ class ReaderViewModel @Inject constructor(
         inactivityTimeoutJob?.cancel()
         openPublication?.let { bookOpener.close(it) }
         openPublication = null
+    }
+
+    private fun loadAnnotationStrokes(annotations: List<MarginAnnotation>, territoryId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val strokeMap = mutableMapOf<String, List<Stroke>>()
+            for (annotation in annotations) {
+                val inkPath = "$territoryId/.marginalia/ink/${annotation.inkNoteId}.json"
+                val json = fileSystem.readFile(inkPath) ?: continue
+                val strokes = parseStrokesFromInkNoteJson(json)
+                if (strokes.isNotEmpty()) strokeMap[annotation.annotationId] = strokes
+            }
+            _annotationStrokes.value = strokeMap
+            latestLocator?.let { updateVisibleAnnotations(it) }
+        }
+    }
+
+    private fun updateVisibleAnnotations(locator: Locator) {
+        val currentHref = locator.href.toString()
+        val annotations = _currentAnnotations.value
+        val strokeMap = _annotationStrokes.value
+        val visible = annotations
+            .filter { annotation -> isAnnotationOnPage(annotation, currentHref) }
+            .flatMap { annotation -> strokeMap[annotation.annotationId] ?: emptyList() }
+        _visibleAnnotationStrokes.value = visible
+        if (visible.isNotEmpty()) {
+            displayRefreshManager.refreshFull()
+            _debugRefreshMode.value = RefreshMode.GC16
+        }
+    }
+
+    private fun isAnnotationOnPage(annotation: MarginAnnotation, currentHref: String): Boolean {
+        val cfi = annotation.anchorCfi
+        if (cfi.isBlank()) return false
+        // Extract the href from CFI: epubcfi(/6/4[chap01]!/4/2/1:0) → spine index 4
+        // Compare with the current page's href using a prefix match on the chapter component
+        // Fallback: match on chapter label if available
+        return try {
+            val cfiHref = extractHrefFromCfi(cfi)
+            cfiHref.isNotEmpty() && currentHref.contains(cfiHref)
+        } catch (e: Exception) {
+            // If CFI parsing fails, fall back to chapter label matching
+            val chapter = annotation.chapterLabel
+            chapter != null && latestLocator?.title != null && chapter == latestLocator?.title
+        }
+    }
+
+    private fun extractHrefFromCfi(cfi: String): String {
+        // epubcfi(/6/4[chap01ref]!/4/2/1:0) → extract "chap01ref" as ID
+        val idMatch = Regex("""epubcfi\(/6/\d+\[([^\]]+)\]""").find(cfi)
+        return idMatch?.groupValues?.getOrNull(1) ?: ""
+    }
+
+    private fun parseStrokesFromInkNoteJson(json: String): List<Stroke> {
+        return try {
+            // Minimal JSON parsing to extract strokes from InkNote format
+            // Uses kotlinx.serialization for reliability
+            val parsed = org.json.JSONObject(json)
+            val revisions = parsed.optJSONArray("revisions") ?: return emptyList()
+            if (revisions.length() == 0) return emptyList()
+            val revision = revisions.getJSONObject(0)
+            val strokesArr = revision.optJSONArray("strokes") ?: return emptyList()
+            val result = mutableListOf<Stroke>()
+            for (i in 0 until strokesArr.length()) {
+                val strokeObj = strokesArr.getJSONObject(i)
+                val strokeId = strokeObj.optString("strokeId", "s-$i")
+                val erased = strokeObj.optBoolean("erased", false)
+                val points = mutableListOf<StrokePoint>()
+                val pointsArr = strokeObj.optJSONArray("points") ?: continue
+                for (j in 0 until pointsArr.length()) {
+                    val pt = pointsArr.getJSONObject(j)
+                    points.add(StrokePoint(
+                        x = pt.getDouble("x").toFloat(),
+                        y = pt.getDouble("y").toFloat(),
+                        pressure = pt.optDouble("pressure", 0.8).toFloat()
+                    ))
+                }
+                if (points.isNotEmpty()) {
+                    result.add(Stroke(
+                        id = strokeId,
+                        points = points,
+                        colour = InkColour.BLACK,
+                        width = 0.002f,
+                        erased = erased,
+                        timestamp = 0L
+                    ))
+                }
+            }
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse InkNote JSON: ${e.message}")
+            emptyList()
+        }
     }
 
     private fun buildInkNoteJson(noteId: String, strokes: List<Stroke>, createdAt: Long): String = buildString {
