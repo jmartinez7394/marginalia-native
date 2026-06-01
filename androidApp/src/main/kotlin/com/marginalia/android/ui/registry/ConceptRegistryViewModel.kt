@@ -6,12 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.marginalia.model.ConceptNote
 import com.marginalia.model.ConceptStatus
 import com.marginalia.vault.ConceptRegistry
+import com.marginalia.vault.RegistrySignalService
 import com.marginalia.vault.VaultFileSystem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -21,10 +23,13 @@ import javax.inject.Inject
 @HiltViewModel
 class ConceptRegistryViewModel @Inject constructor(
     private val conceptRegistry: ConceptRegistry,
-    private val fileSystem: VaultFileSystem
+    private val fileSystem: VaultFileSystem,
+    private val registrySignalService: RegistrySignalService
 ) : ViewModel() {
 
     private val _allConcepts = MutableStateFlow<List<ConceptNote>>(emptyList())
+    private val _pendingCandidateCount = MutableStateFlow(0)
+    val pendingCandidateCount: StateFlow<Int> = _pendingCandidateCount.asStateFlow()
     private val _filterStatus = MutableStateFlow<ConceptStatus?>(null)
     private val _searchQuery = MutableStateFlow("")
     private var currentTerritoryId = "library"
@@ -42,6 +47,7 @@ class ConceptRegistryViewModel @Inject constructor(
         currentTerritoryId = territoryId
         viewModelScope.launch {
             _allConcepts.value = conceptRegistry.getAllConcepts(territoryId)
+            _pendingCandidateCount.value = registrySignalService.getPendingCandidates(territoryId).size
         }
     }
 

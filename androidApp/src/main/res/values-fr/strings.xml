@@ -26,6 +26,14 @@
     <string name="highlight_add_annotation">TODO: Ajouter une annotation</string>
     <string name="highlight_delete">TODO: Supprimer le surlignage</string>
 
+    <!-- Concept candidate review -->
+    <string name="candidate_review_title">TODO: Candidats de concept</string>
+    <string name="candidate_review_empty">TODO: Aucun candidat en attente.</string>
+    <string name="candidate_accept">TODO: Accepter comme nouveau concept</string>
+    <string name="candidate_link">TODO: Lier à un concept existant</string>
+    <string name="candidate_defer">TODO: Différer (7 jours)</string>
+    <string name="candidate_dismiss">TODO: Ignorer</string>
+
     <!-- Highlights panel and reader chrome -->
     <string name="reader_chrome_highlights">TODO: Surlignages</string>
     <string name="reader_chrome_notes">TODO: Notes</string>

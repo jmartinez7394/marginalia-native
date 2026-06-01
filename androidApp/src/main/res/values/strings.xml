@@ -26,6 +26,14 @@
     <string name="highlight_add_annotation">Add annotation</string>
     <string name="highlight_delete">Delete highlight</string>
 
+    <!-- Concept candidate review -->
+    <string name="candidate_review_title">Concept Candidates</string>
+    <string name="candidate_review_empty">No pending candidates.\nAll concepts reviewed.</string>
+    <string name="candidate_accept">Accept as new concept</string>
+    <string name="candidate_link">Link to existing</string>
+    <string name="candidate_defer">Defer (7 days)</string>
+    <string name="candidate_dismiss">Dismiss</string>
+
     <!-- Highlights panel and reader chrome -->
     <string name="reader_chrome_highlights">Highlights</string>
     <string name="reader_chrome_notes">Notes</string>

@@ -41,6 +41,8 @@ import com.marginalia.model.ConceptStatus
 fun ConceptRegistryScreen(
     territoryId: String,
     onBack: () -> Unit,
+    onReviewCandidates: () -> Unit = {},
+    pendingCandidateCount: Int = 0,
     viewModel: ConceptRegistryViewModel = hiltViewModel()
 ) {
     LaunchedEffect(territoryId) {
@@ -49,6 +51,8 @@ fun ConceptRegistryScreen(
 
     BackHandler { onBack() }
 
+    val vmPendingCount by viewModel.pendingCandidateCount.collectAsState()
+    val effectivePendingCount = if (vmPendingCount > 0) vmPendingCount else pendingCandidateCount
     var selectedConcept by remember { mutableStateOf<ConceptNote?>(null) }
 
     if (selectedConcept != null) {
@@ -60,7 +64,9 @@ fun ConceptRegistryScreen(
     } else {
         ConceptListContent(
             viewModel = viewModel,
+            pendingCandidateCount = effectivePendingCount,
             onConceptClick = { selectedConcept = it },
+            onReviewCandidates = onReviewCandidates,
             onBack = onBack
         )
     }
@@ -70,7 +76,9 @@ fun ConceptRegistryScreen(
 @Composable
 private fun ConceptListContent(
     viewModel: ConceptRegistryViewModel,
+    pendingCandidateCount: Int = 0,
     onConceptClick: (ConceptNote) -> Unit,
+    onReviewCandidates: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val concepts by viewModel.filteredConcepts.collectAsState()
@@ -95,6 +103,19 @@ private fun ConceptListContent(
             )
             OutlinedButton(onClick = onBack) {
                 Text(stringResource(R.string.reader_error_back))
+            }
+        }
+
+        // Pending candidates banner
+        if (pendingCandidateCount > 0) {
+            OutlinedButton(
+                onClick = onReviewCandidates,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "$pendingCandidateCount concept candidate${if (pendingCandidateCount > 1) "s" else ""} ready for review",
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
         }
 
