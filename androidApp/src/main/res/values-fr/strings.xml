@@ -9,6 +9,11 @@
     <string name="library_loading">TODO: Chargement de votre bibliothèque…</string>
     <string name="library_error_retry">TODO: Réessayer</string>
 
+    <!-- Reader screen -->
+    <string name="reader_loading">TODO: Ouverture de votre livre…</string>
+    <string name="reader_error_back">TODO: Retour à la bibliothèque</string>
+    <string name="reader_exit_confirmation">TODO: Quitter votre livre ?</string>
+
     <!-- Reading status labels -->
     <string name="library_reading_status_unread">TODO: Non lu</string>
     <string name="library_reading_status_reading">TODO: En cours</string>

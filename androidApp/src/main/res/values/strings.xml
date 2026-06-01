@@ -9,6 +9,11 @@
     <string name="library_loading">Loading your library…</string>
     <string name="library_error_retry">Retry</string>
 
+    <!-- Reader screen -->
+    <string name="reader_loading">Opening your book…</string>
+    <string name="reader_error_back">Back to library</string>
+    <string name="reader_exit_confirmation">Leave your book?</string>
+
     <!-- Reading status labels -->
     <string name="library_reading_status_unread">Unread</string>
     <string name="library_reading_status_reading">Reading</string>
