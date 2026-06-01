@@ -659,6 +659,69 @@ class ReaderViewModel @Inject constructor(
         keyRepository.storeKey(aiProvider.providerId, key.trim())
     }
 
+    // Returns the path of the promoted note markdown file, or null on failure
+    suspend fun promoteAnnotation(annotationId: String): String? = withContext(Dispatchers.IO) {
+        val annotation = getAnnotation(annotationId) ?: return@withContext null
+        val book = currentBook ?: return@withContext null
+
+        val noteId = "ink-${annotationId.take(8)}"
+        val today = java.time.LocalDate.now().toString()
+        val noteTitle = "Margin note — ${book.title} — $today"
+        val titleSafe = LinkedNoteGenerator.sanitiseFilename(noteTitle)
+        val notePath = "${book.territoryId}/notes/$titleSafe.md"
+        val inkSource = ".marginalia/ink/${annotation.inkNoteId}.json"
+        val inkDerived = ".marginalia/margin-notes/$annotationId.svg"
+
+        val transcription = annotation.transcription?.takeIf { it.isNotBlank() }
+
+        val md = buildString {
+            append("---\n")
+            append("title: \"${noteTitle.replace("\"", "\\\"")}\"\n")
+            append("type: \"ink-note\"\n")
+            append("noteId: \"$noteId\"\n")
+            append("inkSource: \"$inkSource\"\n")
+            append("inkDerived: \"$inkDerived\"\n")
+            append("createdAt: \"${java.time.Instant.now()}\"\n")
+            append("activeRevision: \"rev-001\"\n")
+            append("transcribed: ${transcription != null}\n")
+            append("transcribedAt: ${if (transcription != null) "\"${java.time.Instant.now()}\"" else "null"}\n")
+            append("transcribedBy: \"claude-sonnet-4-6\"\n")
+            append("tags: []\n")
+            append("---\n\n")
+            append("# $noteTitle\n\n")
+            if (transcription != null) {
+                append("$transcription\n\n^block-001\n")
+            }
+        }
+
+        return@withContext try {
+            fileSystem.createDirectory("${book.territoryId}/notes")
+            fileSystem.writeFile(notePath, md)
+
+            // Update annotation as promoted
+            val updated = annotation.copy(promoted = true, promotedNoteId = noteId)
+            annotationRepository.updateAnnotation(updated)
+            _currentAnnotations.value = _currentAnnotations.value.map {
+                if (it.annotationId == annotationId) updated else it
+            }
+
+            // Update linked note: add reference after the block ID
+            val blockId = "^margin-$annotationId"
+            val linkedNoteContent = fileSystem.readFile(annotation.linkedNotePath)
+            if (linkedNoteContent != null && linkedNoteContent.contains(blockId)) {
+                val reference = "\n→ Promoted to standalone note: [[$titleSafe]]"
+                val updatedLinkedNote = linkedNoteContent.replace(blockId, "$blockId$reference")
+                fileSystem.writeFile(annotation.linkedNotePath, updatedLinkedNote)
+            }
+
+            Log.d(TAG, "Annotation promoted: $annotationId → $notePath")
+            notePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to promote annotation: ${e.message}")
+            null
+        }
+    }
+
     private suspend fun saveTranscription(
         annotation: MarginAnnotation,
         transcription: String,

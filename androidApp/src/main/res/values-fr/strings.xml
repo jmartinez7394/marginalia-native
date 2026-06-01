@@ -81,6 +81,11 @@
     <string name="library_reading_status_finished">TODO: Terminé</string>
     <string name="library_reading_status_abandoned">TODO: Abandonné</string>
 
+    <!-- Promote annotation to standalone note (Session 5.9) -->
+    <string name="promoted_note_title_prefix">TODO: Note marginale</string>
+    <string name="promoted_note_edit">TODO: Modifier (bientôt disponible)</string>
+    <string name="promoted_note_back">TODO: Retour au livre</string>
+
     <!-- Annotation management UI (Session 5.7) -->
     <string name="annotation_transcribe">TODO: Transcrire</string>
     <string name="annotation_delete">TODO: Supprimer la note marginale</string>

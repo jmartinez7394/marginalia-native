@@ -81,6 +81,11 @@
     <string name="library_reading_status_finished">Finished</string>
     <string name="library_reading_status_abandoned">Abandoned</string>
 
+    <!-- Promote annotation to standalone note (Session 5.9) -->
+    <string name="promoted_note_title_prefix">Margin note</string>
+    <string name="promoted_note_edit">Edit (coming soon)</string>
+    <string name="promoted_note_back">Back to book</string>
+
     <!-- Annotation management UI (Session 5.7) -->
     <string name="annotation_transcribe">Transcribe</string>
     <string name="annotation_delete">Delete margin note</string>

@@ -52,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.wrapContentSize
 import com.marginalia.android.BuildConfig
 import com.marginalia.android.R
@@ -686,6 +687,10 @@ private fun ReadyReader(
         )
     }
 
+    // Promoted note data: path + annotation (to show in promoted note sheet)
+    var promotedNotePath by remember { mutableStateOf<String?>(null) }
+    var promotedAnnotationId by remember { mutableStateOf<String?>(null) }
+
     // Annotation management bottom sheet (tapping an annotation overlay)
     if (selectedAnnotationId != null) {
         val annotation = viewModel.getAnnotation(selectedAnnotationId!!)
@@ -697,11 +702,33 @@ private fun ReadyReader(
                     viewModel.deleteAnnotation(annotationId)
                     selectedAnnotationId = null
                 },
-                onPromote = { /* Session 5.9 */ selectedAnnotationId = null },
+                onPromote = { annotationId ->
+                    coroutineScopeInner.launch {
+                        val path = viewModel.promoteAnnotation(annotationId)
+                        if (path != null) {
+                            promotedNotePath = path
+                            promotedAnnotationId = annotationId
+                        }
+                        selectedAnnotationId = null
+                    }
+                },
                 onDismiss = { selectedAnnotationId = null }
             )
         } else {
             selectedAnnotationId = null
+        }
+    }
+
+    // Promoted note sheet
+    if (promotedNotePath != null && promotedAnnotationId != null) {
+        val annotation = viewModel.getAnnotation(promotedAnnotationId!!)
+        if (annotation != null) {
+            PromotedNoteSheet(
+                annotation = annotation,
+                strokes = viewModel.visibleAnnotationStrokes.collectAsState().value,
+                notePath = promotedNotePath!!,
+                onDismiss = { promotedNotePath = null; promotedAnnotationId = null }
+            )
         }
     }
 
@@ -1348,7 +1375,7 @@ private fun AnnotationManagementSheet(
     annotation: com.marginalia.model.MarginAnnotation,
     viewModel: ReaderViewModel,
     onDelete: (String) -> Unit,
-    onPromote: () -> Unit,
+    onPromote: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1476,7 +1503,10 @@ private fun AnnotationManagementSheet(
             }
 
             // Promote to standalone note
-            OutlinedButton(onClick = onPromote, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { onPromote(annotation.annotationId) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(stringResource(R.string.annotation_promote))
             }
 
@@ -1508,6 +1538,62 @@ private fun AnnotationManagementSheet(
                         modifier = Modifier.weight(1f)
                     ) { Text(stringResource(R.string.annotation_delete)) }
                 }
+            }
+        }
+    }
+}
+
+// --- Promoted note composables ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PromotedNoteSheet(
+    annotation: com.marginalia.model.MarginAnnotation,
+    strokes: List<com.marginalia.ink.Stroke>,
+    notePath: String,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.promoted_note_title_prefix),
+                style = MaterialTheme.typography.titleSmall
+            )
+            // Ink preview — show strokes in a fixed-size canvas
+            AndroidView(
+                factory = { ctx ->
+                    AnnotationOverlayView(ctx).also { it.setBackgroundColor(android.graphics.Color.WHITE) }
+                },
+                update = { overlay -> overlay.updateStrokes(strokes) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+            )
+            // Transcription if available
+            annotation.transcription?.takeIf { it.isNotBlank() }?.let { text ->
+                Text(text = text, style = MaterialTheme.typography.bodySmall)
+            }
+            Text(
+                text = notePath,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = { /* Phase 6: activate writing surface */ },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(stringResource(R.string.promoted_note_edit)) }
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.promoted_note_back))
             }
         }
     }
