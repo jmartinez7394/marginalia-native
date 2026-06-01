@@ -1,6 +1,7 @@
 package com.marginalia.android.platform.reader
 
 import android.content.Context
+import android.util.Log
 import com.marginalia.model.BookFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,7 +22,10 @@ sealed class OpenPublicationResult {
     data class CorruptFile(val message: String) : OpenPublicationResult()
 }
 
-class ReadiumBookOpener(private val context: Context) {
+class ReadiumBookOpener(
+    context: Context,
+    private val vaultRootPath: String
+) {
 
     private val httpClient = DefaultHttpClient()
     private val assetRetriever = AssetRetriever(context.contentResolver, httpClient)
@@ -38,7 +42,11 @@ class ReadiumBookOpener(private val context: Context) {
 
     suspend fun open(filePath: String, format: BookFormat): OpenPublicationResult =
         withContext(Dispatchers.IO) {
-            val file = File(filePath)
+            // Book.filePath is vault-relative. Resolve to absolute using the vault root.
+            val file = if (filePath.startsWith("/")) File(filePath)
+                       else File(vaultRootPath, filePath)
+
+            Log.d(TAG, "open: $filePath → ${file.absolutePath} (exists=${file.exists()})")
             if (!file.exists()) return@withContext OpenPublicationResult.FileNotFound(filePath)
 
             val url = AbsoluteUrl(file.toURI().toString())
@@ -46,9 +54,7 @@ class ReadiumBookOpener(private val context: Context) {
 
             val asset = assetRetriever.retrieve(url)
                 .getOrElse { error ->
-                    return@withContext OpenPublicationResult.CorruptFile(
-                        error.toString()
-                    )
+                    return@withContext OpenPublicationResult.CorruptFile(error.toString())
                 }
 
             when (val result = publicationOpener.open(asset, allowUserInteraction = false)) {
@@ -59,5 +65,9 @@ class ReadiumBookOpener(private val context: Context) {
 
     fun close(publication: Publication) {
         publication.close()
+    }
+
+    companion object {
+        private const val TAG = "ReadiumBookOpener"
     }
 }

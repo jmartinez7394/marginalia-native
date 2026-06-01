@@ -15,6 +15,8 @@ object ReaderModule {
 
     @Provides
     @Singleton
-    fun provideReadiumBookOpener(@ApplicationContext context: Context): ReadiumBookOpener =
-        ReadiumBookOpener(context)
+    fun provideReadiumBookOpener(
+        @ApplicationContext context: Context,
+        @VaultRootPath vaultRootPath: String
+    ): ReadiumBookOpener = ReadiumBookOpener(context, vaultRootPath)
 }
