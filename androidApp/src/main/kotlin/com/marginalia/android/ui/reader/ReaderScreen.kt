@@ -7,8 +7,6 @@ import android.util.Log
 import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,14 +27,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -54,6 +50,10 @@ import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.SelectableNavigator
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.input.DragEvent
+import org.readium.r2.navigator.input.InputListener
+import org.readium.r2.navigator.input.KeyEvent
+import org.readium.r2.navigator.input.TapEvent
 import org.readium.r2.shared.publication.Publication
 
 private const val TAG = "ReaderScreen"
@@ -141,14 +141,14 @@ private fun ReadyReader(
 
     val highlights by viewModel.currentHighlights.collectAsState()
 
-    // Bottom sheet state for colour picker
     var showColourPicker by remember { mutableStateOf(false) }
     var pendingSelectionCfi by remember { mutableStateOf("") }
     var pendingSelectionText by remember { mutableStateOf("") }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 
-    // Full-screen FragmentContainerView for the Readium WebView
+    // Full-screen FragmentContainerView — no Compose overlay intercepts touch events,
+    // allowing the WebView to receive long-press for native text selection.
     AndroidView(
         factory = { ctx ->
             FragmentContainerView(ctx).apply { id = containerId }
@@ -158,6 +158,7 @@ private fun ReadyReader(
 
     DisposableEffect(publication) {
         val handler = Handler(Looper.getMainLooper())
+        var registeredInputListener: InputListener? = null
 
         val addFragmentRunnable = Runnable {
             if (fragmentManager.isStateSaved) return@Runnable
@@ -176,17 +177,50 @@ private fun ReadyReader(
             fragmentManager.beginTransaction()
                 .replace(containerId, EpubNavigatorFragment::class.java, null)
                 .commitNow()
-            navigatorFragment = fragmentManager.findFragmentById(containerId) as? EpubNavigatorFragment
-            Log.d(TAG, "EpubNavigatorFragment added: $navigatorFragment")
+            val fragment = fragmentManager.findFragmentById(containerId) as? EpubNavigatorFragment
+            navigatorFragment = fragment
+            Log.d(TAG, "EpubNavigatorFragment added: $fragment")
+
+            if (fragment != null) {
+                // Use Readium's InputListener for tap-based page navigation.
+                // This fires after the WebView processes the tap, so long-press
+                // (which the WebView uses for text selection) is never intercepted.
+                val tapListener = object : InputListener {
+                    override fun onTap(event: TapEvent): Boolean {
+                        val widthPx = fragment.view?.width?.toFloat() ?: return false
+                        return when {
+                            event.point.x < widthPx * 0.30f -> {
+                                fragment.goBackward(animated = false)
+                                viewModel.onPageTurn()
+                                true
+                            }
+                            event.point.x > widthPx * 0.70f -> {
+                                fragment.goForward(animated = false)
+                                viewModel.onPageTurn()
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    override fun onDrag(event: DragEvent): Boolean = false
+                    override fun onKey(event: KeyEvent): Boolean = false
+                }
+                fragment.addInputListener(tapListener)
+                registeredInputListener = tapListener
+            }
         }
 
         handler.post(addFragmentRunnable)
 
         onDispose {
             handler.removeCallbacks(addFragmentRunnable)
+            val fragment = fragmentManager.findFragmentById(containerId)
+            registeredInputListener?.let {
+                (fragment as? EpubNavigatorFragment)?.removeInputListener(it)
+            }
             navigatorFragment = null
             if (!fragmentManager.isStateSaved) {
-                fragmentManager.findFragmentById(containerId)?.let {
+                fragment?.let {
                     Log.d(TAG, "Removing EpubNavigatorFragment")
                     fragmentManager.beginTransaction().remove(it).commitAllowingStateLoss()
                 }
@@ -194,15 +228,17 @@ private fun ReadyReader(
         }
     }
 
-    // Apply highlight decorations whenever highlight list changes
+    // Apply highlight decorations whenever the list changes.
     LaunchedEffect(navigatorFragment, highlights) {
         val fragment = navigatorFragment ?: return@LaunchedEffect
         val decorable = fragment as? DecorableNavigator ?: return@LaunchedEffect
-        val decorations = highlights.map { it.toDecoration() }
+        val decorations = highlights.mapNotNull { it.toDecoration() }
         decorable.applyDecorations(decorations, HIGHLIGHT_GROUP)
     }
 
-    // Poll for text selection — shows colour picker when user selects text
+    // Poll for text selection. SelectableNavigator has no callback API; polling is
+    // the only option. The WebView long-press now reaches the WebView because there
+    // is no Compose gesture overlay consuming touch events.
     LaunchedEffect(navigatorFragment) {
         val fragment = navigatorFragment ?: return@LaunchedEffect
         val selectable = fragment as? SelectableNavigator ?: return@LaunchedEffect
@@ -219,7 +255,6 @@ private fun ReadyReader(
         }
     }
 
-    // Colour picker bottom sheet
     if (showColourPicker) {
         ModalBottomSheet(
             onDismissRequest = { showColourPicker = false },
@@ -242,41 +277,6 @@ private fun ReadyReader(
             )
         }
     }
-
-    // Gesture overlay — tap zones and swipe-to-exit
-    var swipeStartY by remember { mutableFloatStateOf(0f) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(navigatorFragment) {
-                detectTapGestures { offset ->
-                    val widthPx = size.width.toFloat()
-                    val fragment = navigatorFragment ?: return@detectTapGestures
-                    when {
-                        offset.x < widthPx * 0.30f -> {
-                            fragment.goBackward(animated = false)
-                            viewModel.onPageTurn()
-                        }
-                        offset.x > widthPx * 0.70f -> {
-                            fragment.goForward(animated = false)
-                            viewModel.onPageTurn()
-                        }
-                    }
-                }
-            }
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragStart = { offset -> swipeStartY = offset.y },
-                    onDragEnd = {},
-                    onDragCancel = {}
-                ) { _, dragAmount ->
-                    if (swipeStartY < size.height * 0.15f && dragAmount > 40f) {
-                        onExit()
-                    }
-                }
-            }
-    )
 }
 
 @Composable
@@ -332,12 +332,12 @@ private fun HighlightColourPicker(
     }
 }
 
-private fun Highlight.toDecoration(): Decoration {
+private fun Highlight.toDecoration(): Decoration? {
     val tint = when (colour) {
-        HighlightColour.YELLOW -> Color.argb(255, 220, 220, 220) // light grey
-        HighlightColour.GREEN -> Color.argb(255, 180, 180, 180)  // medium grey
-        HighlightColour.BLUE -> Color.argb(255, 140, 140, 140)   // dark grey
-        HighlightColour.PINK -> Color.argb(255, 160, 160, 160)   // slightly darker grey
+        HighlightColour.YELLOW -> Color.argb(255, 220, 220, 220)
+        HighlightColour.GREEN -> Color.argb(255, 180, 180, 180)
+        HighlightColour.BLUE -> Color.argb(255, 140, 140, 140)
+        HighlightColour.PINK -> Color.argb(255, 160, 160, 160)
     }
     val locator = try {
         org.readium.r2.shared.publication.Locator.fromJSON(org.json.JSONObject("{\"href\":\"\",\"type\":\"application/xhtml+xml\",\"locations\":{\"fragments\":[\"$cfi\"]},\"text\":{\"highlight\":${
@@ -346,12 +346,10 @@ private fun Highlight.toDecoration(): Decoration {
     } catch (e: Exception) {
         null
     }
+    locator ?: return null
     return Decoration(
         id = id,
-        locator = locator ?: org.readium.r2.shared.publication.Locator(
-            href = org.readium.r2.shared.util.Url("about:blank")!!,
-            mediaType = org.readium.r2.shared.util.mediatype.MediaType.XHTML
-        ),
+        locator = locator,
         style = Decoration.Style.Underline(tint = tint)
     )
 }
