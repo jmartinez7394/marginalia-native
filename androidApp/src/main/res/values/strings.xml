@@ -81,6 +81,14 @@
     <string name="library_reading_status_finished">Finished</string>
     <string name="library_reading_status_abandoned">Abandoned</string>
 
+    <!-- Annotation management UI (Session 5.7) -->
+    <string name="annotation_transcribe">Transcribe</string>
+    <string name="annotation_delete">Delete margin note</string>
+    <string name="annotation_delete_confirm">Delete this margin note? This cannot be undone.</string>
+    <string name="annotation_promote">Promote to standalone note</string>
+    <string name="annotation_count">%d margin note(s)</string>
+    <string name="annotation_transcription_pending">[Transcription pending]</string>
+
     <!-- Ink overlay and annotation mode (Session 5.2) -->
     <string name="annotation_highlighter_button">Highlight</string>
     <string name="annotation_pen_settings_button">Pen</string>

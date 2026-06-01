@@ -324,17 +324,21 @@ private fun ReadyReader(
     )
 
     // Annotation overlay — renders saved ink strokes for the current page (above Readium, below InkOverlay).
-    val visibleStrokes by viewModel.visibleAnnotationStrokes.collectAsState()
+    val visibleAnnotationData by viewModel.visibleAnnotationData.collectAsState()
     val annotationOverlayRef = remember { mutableStateOf<AnnotationOverlayView?>(null) }
+    var selectedAnnotationId by remember { mutableStateOf<String?>(null) }
     AndroidView(
         factory = { ctx ->
-            AnnotationOverlayView(ctx).also {
-                annotationOverlayRef.value = it
-                it.setBackgroundColor(Color.TRANSPARENT)
+            AnnotationOverlayView(ctx).also { overlay ->
+                annotationOverlayRef.value = overlay
+                overlay.setBackgroundColor(Color.TRANSPARENT)
+                overlay.onAnnotationTapped = { annotationId ->
+                    selectedAnnotationId = annotationId
+                }
             }
         },
         update = { overlay ->
-            overlay.updateStrokes(visibleStrokes)
+            overlay.updateAnnotations(visibleAnnotationData)
         },
         modifier = Modifier.fillMaxSize()
     )
@@ -589,7 +593,9 @@ private fun ReadyReader(
     var showLinkedNotePanel by remember { mutableStateOf(false) }
 
     if (showChromeRef.value) {
+        val annotationCount = visibleAnnotationData.size
         ReaderChromeOverlay(
+            annotationCount = annotationCount,
             onHighlightsClick = { showHighlightsPanel = true; showChromeRef.value = false },
             onNotesClick = { showLinkedNotePanel = true; showChromeRef.value = false },
             onDismiss = { showChromeRef.value = false }
@@ -680,6 +686,25 @@ private fun ReadyReader(
         )
     }
 
+    // Annotation management bottom sheet (tapping an annotation overlay)
+    if (selectedAnnotationId != null) {
+        val annotation = viewModel.getAnnotation(selectedAnnotationId!!)
+        if (annotation != null) {
+            AnnotationManagementSheet(
+                annotation = annotation,
+                onTranscribe = { /* Session 5.8 */ selectedAnnotationId = null },
+                onDelete = { annotationId ->
+                    viewModel.deleteAnnotation(annotationId)
+                    selectedAnnotationId = null
+                },
+                onPromote = { /* Session 5.9 */ selectedAnnotationId = null },
+                onDismiss = { selectedAnnotationId = null }
+            )
+        } else {
+            selectedAnnotationId = null
+        }
+    }
+
     if (showConceptLinkSheet && selectedHighlight != null) {
         val capturedHighlight = selectedHighlight
         ConceptLinkSheet(
@@ -705,6 +730,7 @@ private fun ReadyReader(
 
 @Composable
 private fun ReaderChromeOverlay(
+    annotationCount: Int,
     onHighlightsClick: () -> Unit,
     onNotesClick: () -> Unit,
     onDismiss: () -> Unit
@@ -714,6 +740,17 @@ private fun ReaderChromeOverlay(
             .fillMaxSize()
             .clickable(onClick = onDismiss)
     ) {
+        // Annotation count indicator — top of chrome
+        if (annotationCount > 0) {
+            Text(
+                text = stringResource(R.string.annotation_count, annotationCount),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp)
+            )
+        }
         // Bottom chrome strip
         Row(
             modifier = Modifier
@@ -1290,6 +1327,85 @@ private fun HighlightColourPicker(
                 .padding(top = 8.dp, bottom = 16.dp)
         ) {
             Text(stringResource(R.string.highlight_delete))
+        }
+    }
+}
+
+// --- Annotation management composables ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AnnotationManagementSheet(
+    annotation: com.marginalia.model.MarginAnnotation,
+    onTranscribe: () -> Unit,
+    onDelete: (String) -> Unit,
+    onPromote: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Transcription status
+            val transcriptionText = annotation.transcription?.takeIf { it.isNotBlank() }
+                ?: stringResource(R.string.annotation_transcription_pending)
+            Text(
+                text = transcriptionText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
+            // Transcribe button (always shown — shows error in 5.8 if no API key)
+            Button(onClick = onTranscribe, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.annotation_transcribe))
+            }
+
+            // Promote to standalone note
+            OutlinedButton(onClick = onPromote, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.annotation_promote))
+            }
+
+            // Delete with confirmation
+            if (!showDeleteConfirm) {
+                OutlinedButton(
+                    onClick = { showDeleteConfirm = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.annotation_delete)) }
+            } else {
+                Text(
+                    text = stringResource(R.string.annotation_delete_confirm),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = false },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(stringResource(R.string.candidate_dismiss)) }
+                    Button(
+                        onClick = {
+                            scope.launch { sheetState.hide() }
+                            onDelete(annotation.annotationId)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(stringResource(R.string.annotation_delete)) }
+                }
+            }
         }
     }
 }

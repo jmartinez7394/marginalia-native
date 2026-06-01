@@ -81,6 +81,14 @@
     <string name="library_reading_status_finished">TODO: Terminé</string>
     <string name="library_reading_status_abandoned">TODO: Abandonné</string>
 
+    <!-- Annotation management UI (Session 5.7) -->
+    <string name="annotation_transcribe">TODO: Transcrire</string>
+    <string name="annotation_delete">TODO: Supprimer la note marginale</string>
+    <string name="annotation_delete_confirm">TODO: Supprimer cette note marginale ? Cette action est irréversible.</string>
+    <string name="annotation_promote">TODO: Promouvoir en note autonome</string>
+    <string name="annotation_count">TODO: %d note(s) marginale(s)</string>
+    <string name="annotation_transcription_pending">TODO: [Transcription en attente]</string>
+
     <!-- Ink overlay and annotation mode (Session 5.2) -->
     <string name="annotation_highlighter_button">TODO: Surligner</string>
     <string name="annotation_pen_settings_button">TODO: Stylo</string>

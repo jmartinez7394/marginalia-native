@@ -100,7 +100,10 @@ class ReaderViewModel @Inject constructor(
 
     // annotationId → strokes loaded from InkNote JSON
     private val _annotationStrokes = MutableStateFlow<Map<String, List<Stroke>>>(emptyMap())
-    // strokes for the currently visible page/chapter
+    // (annotationId, strokes) pairs for the currently visible page/chapter
+    private val _visibleAnnotationData = MutableStateFlow<List<Pair<String, List<Stroke>>>>(emptyList())
+    val visibleAnnotationData: StateFlow<List<Pair<String, List<Stroke>>>> = _visibleAnnotationData.asStateFlow()
+    // Kept for backwards compat; derived from _visibleAnnotationData
     private val _visibleAnnotationStrokes = MutableStateFlow<List<Stroke>>(emptyList())
     val visibleAnnotationStrokes: StateFlow<List<Stroke>> = _visibleAnnotationStrokes.asStateFlow()
 
@@ -613,6 +616,37 @@ class ReaderViewModel @Inject constructor(
         openPublication = null
     }
 
+    fun getAnnotation(annotationId: String): MarginAnnotation? =
+        _currentAnnotations.value.find { it.annotationId == annotationId }
+
+    fun deleteAnnotation(annotationId: String) {
+        val annotation = getAnnotation(annotationId) ?: return
+        val book = currentBook ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            when (val result = annotationRepository.deleteAnnotation(annotationId)) {
+                is Result.Success -> {
+                    _currentAnnotations.value = _currentAnnotations.value.filter { it.annotationId != annotationId }
+                    _annotationStrokes.value = _annotationStrokes.value - annotationId
+                    latestLocator?.let { updateVisibleAnnotations(it) }
+                    // Delete SVG file
+                    val svgPath = "${book.territoryId}/.marginalia/margin-notes/$annotationId.svg"
+                    try { fileSystem.deleteFile(svgPath) } catch (e: Exception) {
+                        Log.w(TAG, "Could not delete SVG for $annotationId: ${e.message}")
+                    }
+                    // Delete InkNote JSON
+                    val inkPath = "${book.territoryId}/.marginalia/ink/${annotation.inkNoteId}.json"
+                    try { fileSystem.deleteFile(inkPath) } catch (e: Exception) {
+                        Log.w(TAG, "Could not delete InkNote for $annotationId: ${e.message}")
+                    }
+                    displayRefreshManager.refreshRegalFull()
+                    _debugRefreshMode.value = RefreshMode.REGAL
+                    Log.d(TAG, "Annotation deleted: $annotationId")
+                }
+                is Result.Failure -> Log.e(TAG, "Failed to delete annotation: ${result.error}")
+            }
+        }
+    }
+
     private fun loadAnnotationStrokes(annotations: List<MarginAnnotation>, territoryId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val strokeMap = mutableMapOf<String, List<Stroke>>()
@@ -631,11 +665,15 @@ class ReaderViewModel @Inject constructor(
         val currentHref = locator.href.toString()
         val annotations = _currentAnnotations.value
         val strokeMap = _annotationStrokes.value
-        val visible = annotations
+        val visibleData = annotations
             .filter { annotation -> isAnnotationOnPage(annotation, currentHref) }
-            .flatMap { annotation -> strokeMap[annotation.annotationId] ?: emptyList() }
-        _visibleAnnotationStrokes.value = visible
-        if (visible.isNotEmpty()) {
+            .mapNotNull { annotation ->
+                val strokes = strokeMap[annotation.annotationId] ?: return@mapNotNull null
+                annotation.annotationId to strokes
+            }
+        _visibleAnnotationData.value = visibleData
+        _visibleAnnotationStrokes.value = visibleData.flatMap { it.second }
+        if (visibleData.isNotEmpty()) {
             displayRefreshManager.refreshFull()
             _debugRefreshMode.value = RefreshMode.GC16
         }
